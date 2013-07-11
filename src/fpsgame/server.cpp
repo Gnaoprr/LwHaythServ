@@ -2763,11 +2763,9 @@ namespace server
     VAR(usegeoip, 0, 1, 1);
     void connected(clientinfo *ci)
     {
-		if(usegeoip) {
-			GeoIP *_gi;
-			_gi = GeoIP_open("./GeoIP.dat", GEOIP_STANDARD);
-		}
-        if(m_demo) enddemoplayback();
+	GeoIP *_gi;
+	_gi = GeoIP_open("./GeoIP.dat", GEOIP_STANDARD);
+	if(m_demo) enddemoplayback();
 
         if(!hasmap(ci)) rotatemap(false);
 
@@ -2793,7 +2791,7 @@ namespace server
 
         if(m_demo) setupdemoplayback();
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
-		if(_gi) {
+		if(_gi && usegeoip) {
 			uint ip = getclientip(ci->clientnum);
 			string _ip;
 			formatstring(_ip)("%i.%i.%i.%i", ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
@@ -2806,7 +2804,7 @@ namespace server
 				if(_ci->privilege >= PRIV_ADMIN) sendf(_ci->clientnum, 1, "ris", N_SERVMSG, GeoIP_Player_Connected_Message_Admin);
 				else sendf(_ci->clientnum, 1, "ris", N_SERVMSG, GeoIP_Player_Connected_Message);
 			}
-			GeoIP_delete(gi);
+			GeoIP_delete(_gi);
 		}
     }
 
