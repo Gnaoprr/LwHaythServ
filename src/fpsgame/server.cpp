@@ -2793,7 +2793,7 @@ namespace server
 
         if(m_demo) setupdemoplayback();
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
-		if(gi) {
+		if(_gi) {
 			uint ip = getclientip(ci->clientnum);
 			string _ip;
 			formatstring(_ip)("%i.%i.%i.%i", ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
