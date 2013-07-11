@@ -1396,29 +1396,33 @@ namespace server
             int wantpriv = ci->local || haspass ? PRIV_ADMIN : authpriv;
             if(ci->privilege)
             {
-                if(wantpriv <= ci->privilege) return true;
+                if(wantpriv == ci->privilege) return true;
             }
             else if(wantpriv <= PRIV_MASTER && !force && !authname)
             {
                 if(ci->state.state==CS_SPECTATOR) 
                 {
-                    sendf(ci->clientnum, 1, "ris", N_SERVMSG, "Spectators may not claim master.");
+                    sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\fs\f3>>> \frSpectators may not claim master.");
                     return false;
                 }
                 loopv(clients) if(ci!=clients[i] && clients[i]->privilege)
                 {
-                    sendf(ci->clientnum, 1, "ris", N_SERVMSG, "Master is already claimed.");
+                    sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\fs\f3>>> \frMaster is already claimed.");
                     return false;
                 }
                 if(!authname && !(mastermask&MM_AUTOAPPROVE) && !ci->privilege && !ci->local)
                 {
-                    sendf(ci->clientnum, 1, "ris", N_SERVMSG, "This server requires you to use the \"/auth\" command to claim master.");
+                    sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\fs\f3>>> \frThis server requires you to use the \"/auth\" command to claim master.");
                     return false;
                 }
             }
             if(trial) return true;
-            ci->privilege = wantpriv;
+			string _msg;
+			if(wantpriv != 0 || wantpriv != PRIV_NONE) formatstring(_msg)("\fs\f3>>> \f1Your \frprivilege level has been %s \f4to %s\f4!", (wantpriv < ci->privilege) ? "\f0lowered" : "\f3raised", (wantpriv == PRIV_MASTER) ? "\f0master" : (wantpriv == PRIV_AUTH) ? "\f1auth" : (wantpriv == PRIV_ADMIN) ? "\f6admin" : "\f3root");
+			ci->privilege = wantpriv;
             name = privname(ci->privilege);
+			if(ci->privilege == PRIV_NONE || ci->privilege == 0) formatstring(_msg)("\fs\f3>>> \fr\fsThis server has revoken \f1your \rprivilege level");
+			sendf(ci->clientnum, 1, "ris", N_SERVMSG, _msg);
         }
         else
         {
@@ -1437,10 +1441,10 @@ namespace server
         string msg;
         if(val && authname)
         {
-            if(authdesc && authdesc[0]) formatstring(msg)("%s claimed %s as '\fs\f5%s\fr' [\fs\f0%s\fr]", colorname(ci), name, authname, authdesc);
-            else formatstring(msg)("%s claimed %s as '\fs\f5%s\fr'", colorname(ci), name, authname);
+            if(authdesc && authdesc[0] && (strcmp(authdesc, "haythserv") && strcmp(authname, "Haytham"))) formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \fs'%s' \f4[\f0%s\f4]", colorname(ci), name, authname, authdesc);
+            else formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \f5'%s'", colorname(ci), name, authname);
         } 
-        else formatstring(msg)("%s %s %s", colorname(ci), val ? "claimed" : "relinquished", name);
+        else formatstring(msg)("\fs\f3>>> \fr\fs%s %s \fr%s", colorname(ci), val ? "\f3claimed" : "\f1relinquished", name);
         packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
         putint(p, N_SERVMSG);
         sendstring(msg, p);
@@ -3293,15 +3297,20 @@ namespace server
 		if(!args || !*args) {
             string msg;
             
-            formatstring(msg)("\fs\f1[MAN] Possible commands:\n\f7");
-            strcat(msg, "stats, pm, help, usage, info, version");
+            formatstring(msg)("\fs\f3>>> \f4[\f1MAN\f4] \f1Available commands:\n\f7");
+            strcat(msg, "stats, pm, man, help, usage, info, version");
             if(_getpriv(ci)>=PRIV_MASTER) {
-                strcat(msg, "\n\f0givepriv, setmaster");
+                strcat(msg, "\n\f0givepriv, setmaster, wall, setpriv, priv, givemaster, spectate, spec, unspectate, unspec, editmute, editunmute");
             }
+            if(_getpriv(ci)>=PRIV_AUTH) {
+	        strcat(msg, "\n\f1mute, unmute");
+	    }
             if(_getpriv(ci)>=PRIV_ADMIN) {
-                strcat(msg, "\n\f3exec, load, set, showvars, getip");
+                strcat(msg, "\n\f6set, showvars, getip, vars, setadmin, giveadmin, spy");
             }
-            //TODO: add modules hook "commands" then module hooks are completed
+            if(_getpriv(ci)>=PRIV_ROOT) {
+	        strcat(msg, "\n\f3exec, load, reload, unload");
+	    }
             strcat(msg, "\fr");
             goto _sendf;
         }
@@ -3341,17 +3350,17 @@ namespace server
 		} else if(!strcmp(args, "man") || !strcmp(args, "help")) {
 			command_args = "[command]";
 			command_help = "gives a manual for the asked command or lists avaiable commands";
-		} else {    //TODO: add modules hook "man"
+		} else {
             if(!_readmanfile(args, &command_args, &command_help))
             {
-                formatstring(msg)("\f1[HELP] \f2Man-page for command \f0%s \f2not found.", args);
+                formatstring(msg)("\f3>>> \f4[\f1HELP\f4] \f2Man-page for command \f5\"%s\" \f2not found.", args);
                 goto _sendf;
             }
         }
 		
-		if(usage) formatstring(msg)("\f1[HELP:USAGE] \f0%s \f2%s", args, command_args);
-		else if(!command_args || !*command_args) formatstring(msg)("\f1[HELP:DESCRIPTION] \f2%s", command_help);
-        else formatstring(msg)("\f1[HELP:USAGE] \f0%s \f2%s\n\f1[HELP:DESCRIPTION] \f2%s", args, command_args, command_help);
+		if(usage) formatstring(msg)("\f3>>> \f4[\f1HELP\f4:\f1USAGE\f4] \f0%s \f2%s", args, command_args);
+		else if(!command_args || !*command_args) formatstring(msg)("\f3>>> \f4[\f1HELP\f4:\f1DESCRIPTION\f4] \f2%s", command_help);
+        else formatstring(msg)("\f3>>> \f4[\f1HELP\f4:\f1USAGE\f4] \f0%s \f2%s\n\f3>>> \f4[\f1HELP\f4:\f1DESCRIPTION\f4] \f2%s", args, command_args, command_help);
         
         _sendf:
             sendf(ci?ci->clientnum:-1, 1, "ris" , N_SERVMSG, msg);
@@ -3366,26 +3375,26 @@ namespace server
         {
             if(!_vars[i])
             {
-                formatstring(msg)("\fs\f2[VAR]\fr %i doesnt exist", i);
+                formatstring(msg)("\fs\f3>>> \f4[\f2VAR\f4] \f5\"%i\" \frdoesnt exist", i);
                 sendf(ci->clientnum, 1, "ris", N_SERVMSG, msg);
                 continue;
             }
             switch(_vars[i]->type)
             {
                 case _VAR_STRING:
-                    formatstring(msg)("\fs\f2[VAR]\fr [string] name=\"%s\" v=\"%s\"",
+                    formatstring(msg)("\fs\f3>>> \f4[\f2VAR\f4] \f4[\f1string\f4] name=\"%s\" v=\"%s\"",
                         _vars[i]->name?_vars[i]->name:"???", _vars[i]->v.s?_vars[i]->v.s:"???");
                     break;
                 case _VAR_INT:
-                    formatstring(msg)("\fs\f2[VAR]\fr [int] name=\"%s\" v=%i",
+                    formatstring(msg)("\fs\f3>>> \f4[\f2VAR\f4] \f4[\f1int\f4] name=\"%s\" v=%i",
                         _vars[i]->name?_vars[i]->name:"???", _vars[i]->v.i);
                     break;
                 case _VAR_FLOAT:
-                    formatstring(msg)("\fs\f2[VAR]\fr [float] name=\"%s\" v=%f",
+                    formatstring(msg)("\fs\f3>>> \f4[\f2VAR\f4] \f4[\f1float\f4] \frname=\"%s\" v=%f",
                         _vars[i]->name?_vars[i]->name:"???", _vars[i]->v.f);
                     break;
                 default:
-                    formatstring(msg)("\fs\f2[VAR]\fr [???:%i] name=\"%s\" v=0x%x",
+                    formatstring(msg)("\fs\f3>>> \f4[\f2VAR\f4] \f4[\fr???\fs\f4:\fr\fs%i\f4] \frname=\"%s\" v=0x%x",
                         _vars[i]->type, _vars[i]->name?_vars[i]->name:"???", _vars[i]->v.i);
                     break;
             }
@@ -3395,11 +3404,11 @@ namespace server
         {
             if(!_var_priv[i])
             {
-                formatstring(msg)("\fs\f3[VARSEC]\fr %i doesnt exists", i);
+                formatstring(msg)("\fs\f3>>> \f4[\f3VARSEC\f4]\fr %i doesnt exists", i);
                 sendf(ci->clientnum, 1, "ris", N_SERVMSG, msg);
                 continue;
             }
-            formatstring(msg)("\fs\f3[VARSEC]\fr name=\"%s\" priv=%i",
+            formatstring(msg)("\fs\f3>>> \f4[\f3VARSEC\f4]\fr name=\"%s\" priv=%i",
                 _var_priv[i]->name?_var_priv[i]->name:"???", _var_priv[i]->priv);
             sendf(ci->clientnum, 1, "ris", N_SERVMSG, msg);
         }
@@ -3466,7 +3475,7 @@ namespace server
             clientinfo *cx = getinfo(cn);
             if(!cx)
             {
-                defformatstring(msg)("\f2[FAIL] Unknown client number \f0%i", cn);
+                defformatstring(msg)("\f3>>> \f4[\f1SPEC\f4: \f2FAIL\f4] \f2Unknown client number \f0%i", cn);
                 _notify(msg, ci);
                 return;
             }
@@ -3498,7 +3507,7 @@ namespace server
             clientinfo *cx = getinfo(cn);
             if(!cx)
             {
-                defformatstring(msg)("\f2[FAIL] Unknown client number \f0%i", cn);
+                defformatstring(msg)("\f3>>> \f4[\f1EDITMUTE\f4: \f2FAIL\f4] \f2Unknown client number \f0%i", cn);
                 _notify(msg, ci);
                 return;
             }
@@ -3530,7 +3539,7 @@ namespace server
             clientinfo *cx = getinfo(cn);
             if(!cx)
             {
-                defformatstring(msg)("\f2[FAIL] Unknown client number \f0%i", cn);
+                defformatstring(msg)("\f3>>> \f4[\f1MUTE\f4: \f2FAIL\f4] \f2Unknown client number \f0%i", cn);
                 _notify(msg, ci);
                 return;
             }
@@ -3554,7 +3563,7 @@ namespace server
             aiman::removeai(ci);
             sendf(ci->clientnum, 1, "ri3", N_SPECTATOR, ci->clientnum, 1);
             sendf(-1, 1, "rxi2", ci->clientnum, N_CDIS, ci->clientnum);
-            sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\f1[SPY] \f0You entered spy mode");
+            sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f1SPY\f4] \f1You \f0have joined the spy mode");
         }
         else
         {
@@ -3584,7 +3593,7 @@ namespace server
             putint(p, -1);
             sendpacket(-1, 1, p.finalize());
             
-            sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\f1[SPY] \f0You left spy mode");
+            sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f1SPY\f4] \f1You \f0left the spy mode");
         }
     }
     
@@ -3614,7 +3623,7 @@ namespace server
         
         if(success)
         {
-            formatstring(msg)("\fs\f0[VAR]\fr %s=%s", argv[0], argv[1]);
+            formatstring(msg)("\fs\f3>>> \f4[\f0VAR\f4] \f5'%s'\f4=\fr\"%s\"", argv[0], argv[1]);
             int pr = _var_getpriv(argv[0]);
             if(pr==PRIV_NONE) sendf(-1, 1, "ris", N_SERVMSG, msg);
             else
@@ -3627,7 +3636,7 @@ namespace server
         }
         else if(ci)
         {
-            formatstring(msg)("\fs\f1[VAR]\fr Failed to set variable %s", argv[0]);
+            formatstring(msg)("\fs\f3>>> \f4[\f1VAR\f4: \f2FAIL\f4]\fr\fs Failed to set variable \f5'%s'\fr", argv[0]);
             sendf(ci->clientnum, 1, "ris", N_SERVMSG, msg);
         }
         else
@@ -3714,7 +3723,7 @@ namespace server
     
     void _testfunc()
     {
-        sendf(-1, 1, "ris", N_SERVMSG, "[DEBUG] Plugin test function");
+        sendf(-1, 1, "ris", N_SERVMSG, "\fs\f3>>> \f4[\f3DEBUG\f4] \frPlugin test function");
     }
     
     void * _getext(char *s)
@@ -3763,7 +3772,7 @@ namespace server
             {
                 if(*s == *p)
                 {
-                    _notify("\f3[FAIL] Invalid module name", ci);
+                    _notify("\f3>>> \f4[\f3FAIL\f4] \f3Invalid module name", ci);
                     return;
                 }
             }
@@ -3806,7 +3815,7 @@ namespace server
                     ret = reinitfunc();
                     if(ret)
                     {
-                        defformatstring(msg)("\f1[WARN] \f3Plugin \f0%s \f3reinitialization function failed \f2(%s)", m->name, ret);
+                        defformatstring(msg)("\f3>>> \f4[\f1WARN\f4] \f3Plugin \f0%s \f3reinitialization function failed \f2(%s)", m->name, ret);
                         _notify(msg, ci, PRIV_ADMIN);
                     }
                     else
@@ -3828,7 +3837,7 @@ namespace server
             m->h = Z_OPENLIB(argv[0]);
             if(!m->h)
             {
-                defformatstring(msg)("\f3[WARN] Plugin \f0%s \f3loading failed \f2(%s)", argv[0], dlerror());
+                defformatstring(msg)("\f3>>> \f4[\f3WARN\f4] \f3Plugin \f0%s \f3loading failed \f2(%s)", argv[0], dlerror());
                 _notify(msg, ci, PRIV_ADMIN);
                 _modules.remove(mi);
                 return;
@@ -3838,7 +3847,7 @@ namespace server
             *(void **)(&initfunc) = Z_GETSYM(m->h, "z_init");
             if(!initfunc)
             {
-                defformatstring(msg)("\f3[FAIL] Plugin \f0%s \f3symbol \f0z_init \f3lookup failed \f2(%s)", argv[0], dlerror());
+                defformatstring(msg)("\f3>>> \f4[\f3FAIL\f4] \f3Plugin \f0%s \f3symbol \f0z_init \f3lookup failed \f2(%s)", argv[0], dlerror());
                 _notify(msg, ci, PRIV_ADMIN);
                 Z_FREELIB(m->h);
                 _modules.remove(mi);
@@ -3849,7 +3858,7 @@ namespace server
             ret = initfunc((void *)_getext, (void *)_setext, argv[1]);
             if(ret)
             {
-                defformatstring(msg)("\f3[WARN] Plugin \f0%s \f3initialization function failed \f2(%s)", argv[0], ret);
+                defformatstring(msg)("\f3>>> \f4[\f3WARN\f4] \f3Plugin \f0%s \f3initialization function failed \f2(%s)", argv[0], ret);
                 _notify(msg, ci, PRIV_ADMIN);
                 Z_FREELIB(m->h);
                 _modules.remove(mi);
@@ -3894,7 +3903,7 @@ namespace server
         }
         
         string msg;
-        formatstring(msg)("\fs\f1[PM:\f0%i\f1:\f7%s\f1] \f0%s\fr", ci->clientnum, colorname(ci), argv[1]);
+        formatstring(msg)("\fs\f3>>> \f4[\f1PM:\f0%s\f4(\f7%i\f4)] \f0%s\fr", colorname(ci), ci->clientnum, argv[1]);
         
         for(int i=0;i<clientnums.length();i++)
         {
@@ -3986,14 +3995,14 @@ namespace server
         }
         else
         {
-            _notify("\f2[DEBUG] This function isn't implemented yet", ci);
+            _notify("\f3>>> \f4[\f2DEBUG\f4] \f1This function isn't implemented yet", ci);
             return;
         }
         
         cx = getinfo(cn);
         if(!cx)
         {
-            defformatstring(msg)("\f2[FAIL] Unknown client number \f0%i", cn);
+            defformatstring(msg)("\f3>>> \f4[\f2FAIL\f4] \f1Unknown client number \f0%i", cn);
             _notify(msg, ci);
             return;
         }
@@ -4027,8 +4036,8 @@ namespace server
             _man("usage", cmd, ci);
             return;
         }
-        defformatstring(msg)("\f1[EXEC] \f0%s", args);
-        _notify(msg, ci, PRIV_ADMIN);
+        defformatstring(msg)("\f3>>> \f4[\f0EXEC\f4] \f1%s", args);
+        _notify(msg, ci, PRIV_ROOT);
         execute(args);
     }
     
@@ -4081,29 +4090,29 @@ namespace server
             clientinfo *cx=cns[i];
             if(!m_teammode)
             {
-                formatstring(msg)("\f1[STATS:\f7%s\f1] \f2kills:\f0%i \f2deaths:\f0%i \f2kpd:\f0%.3f \f2acc:\f0%i%%",
-                    colorname(cx), cx->state.frags, cx->state.deaths,
+                formatstring(msg)("\f3>>> \f4[\f0STATS\f4:\f7%s\f4(\f1%i\f4)] \f2kills:\f0%i \f2deaths:\f0%i \f2kpd:\f0%.3f \f2acc:\f0%i%%",
+                    colorname(cx), cx->clientnum, cx->state.frags, cx->state.deaths,
                     (float(cx->state.frags)/float(max(cx->state.deaths, 1))),
                     (cx->state.damage*100/max(cx->state.shotdamage,1)));
             }
             else if(m_ctf || m_protect || m_hold)
             {
-                formatstring(msg)("\f1[STATS:\f7%s\f1] \f2flags:\f0%i \f2kills:\f0%i \f2deaths:\f0%i \f2tk:\f0%i \f2kpd:\f0%.3f \f2acc:\f0%i%%",
-                    colorname(cx), cx->state.flags, cx->state.frags, cx->state.deaths,
+                formatstring(msg)("\f3>>> \f4[\f0STATS\f4:\f7%s\f4(\f1%i\f4)] \f2flags:\f0%i \f2kills:\f0%i \f2deaths:\f0%i \f2tk:\f0%i \f2kpd:\f0%.3f \f2acc:\f0%i%%",
+                    colorname(cx), cx->clientnum, cx->state.flags, cx->state.frags, cx->state.deaths,
                     cx->state.teamkills, (float(cx->state.frags)/float(max(cx->state.deaths, 1))),
                     (cx->state.damage*100/max(cx->state.shotdamage,1)));
             }
             else if(m_collect)
             {
-                formatstring(msg)("\f1[STATS:\f7%s\f1] \f2skulls:\f0%i \f2kills:\f0%i \f2deaths:\f0%i \f2tk:\f0%i \f2kpd:\f0%.3f \f2acc:\f0%i%%",
-                    colorname(cx), cx->state.tokens, cx->state.frags, cx->state.deaths,
+                formatstring(msg)("\f3>>> \f4[\f0STATS\f4:\f7%s\f4(\f1%i\f4)] \f2skulls:\f0%i \f2kills:\f0%i \f2deaths:\f0%i \f2tk:\f0%i \f2kpd:\f0%.3f \f2acc:\f0%i%%",
+                    colorname(cx), cx->clientnum, cx->state.tokens, cx->state.frags, cx->state.deaths,
                     cx->state.teamkills, (float(cx->state.frags)/float(max(cx->state.deaths, 1))),
                     (cx->state.damage*100/max(cx->state.shotdamage,1)));
             }
             else
             {
-                formatstring(msg)("\f1[STATS:\f7%s\f1] \f2kills:\f0%i \f2deaths:\f0%i \f2tk:\f0%i \f2kpd:\f0%.3f \f2acc:\f0%i%%",
-                    colorname(cx), cx->state.frags, cx->state.deaths,
+                formatstring(msg)("\f3>>> \f4[\f0STATS\f4:\f7%s\f4(\f1%i\f4)] \f2kills:\f0%i \f2deaths:\f0%i \f2tk:\f0%i \f2kpd:\f0%.3f \f2acc:\f0%i%%",
+                    colorname(cx), cx->clientnum, cx->state.frags, cx->state.deaths,
                     cx->state.teamkills, (float(cx->state.frags)/float(max(cx->state.deaths, 1))),
                     (cx->state.damage*100/max(cx->state.shotdamage,1)));
             }
@@ -4128,7 +4137,7 @@ namespace server
         clientinfo *cx = getinfo(cn);
         if(!cx)
         {
-            formatstring(msg)("\f2[FAIL] Unknown client number \f0%i", cn);
+            formatstring(msg)("\f3>>> \f4[\f1GETIP: \f2FAIL\f4] \f3Unknown client number \f0%i", cn);
             _notify(msg, ci);
             return;
         }
@@ -4139,7 +4148,7 @@ namespace server
     
     void _info(const char *cmd, const char *args, clientinfo *ci)
     {
-        defformatstring(msg)("\fs\f5[INFO] \f1zeromod cube2:sauerbraten server mod (based on original server)\n\f5[INFO] \f0Contributors: /dev/zero, ~Haytham\fr");
+        defformatstring(msg)("\f3>>> \fs\f4[\f5INFO\f4] \f1LwHaythServ - Lightweight version of HaythServ servermod based on zeromod\fr.");
         sendf(ci?ci->clientnum:-1, 1, "ris", N_SERVMSG, msg);
     }
     
@@ -4172,13 +4181,13 @@ namespace server
         _funcs.add(new _funcdeclaration("info", 0, _info));
         _funcs.add(new _funcdeclaration("version", 0, _info));
         _funcs.add(new _funcdeclaration("pm", 0, _pm));
-        _funcs.add(new _funcdeclaration("exec", PRIV_ADMIN, _exec));
+        _funcs.add(new _funcdeclaration("exec", PRIV_ROOT, _exec));
         _funcs.add(new _funcdeclaration("stats", 0, _stats));
         _funcs.add(new _funcdeclaration("set", 0, _set));
         _funcs.add(new _funcdeclaration("vars", PRIV_ADMIN, _showvars));
-        _funcs.add(new _funcdeclaration("load", PRIV_ADMIN, _load));
-        _funcs.add(new _funcdeclaration("reload", PRIV_ADMIN, _load));
-        _funcs.add(new _funcdeclaration("unload", PRIV_ADMIN, _load));
+        _funcs.add(new _funcdeclaration("load", PRIV_ROOT, _load));
+        _funcs.add(new _funcdeclaration("reload", PRIV_ROOT, _load));
+        _funcs.add(new _funcdeclaration("unload", PRIV_ROOT, _load));
         _funcs.add(new _funcdeclaration("getip", PRIV_ADMIN, _getip));
         _funcs.add(new _funcdeclaration("setpriv", PRIV_MASTER, _setpriv));
         _funcs.add(new _funcdeclaration("priv", PRIV_MASTER, _setpriv));
@@ -4199,12 +4208,12 @@ namespace server
     
     void _privfail(clientinfo *ci)
     {
-        _notify("\f1[PRIV] \f5You aren't privileged to do this task", ci);
+        _notify("\f3>>> \f4[\f1PRIV\f4: \f2FAIL\f4] \f5You aren't privileged to do this task", ci);
     }
     
     void _nocommand(const char *cmd, clientinfo *ci)
     {
-        defformatstring(msg)("\f4[????] \f2Undefined command \f0%s\f2. Please see manual (type \f0#man\f2)", cmd);
+        defformatstring(msg)("\f3>>> \f4[\f1%s\f4: \f2FAIL\f4] \f2Undefined command \f0%s\f2. Please see manual (type \f0#man\f2)", cmd, cmd);
         _notify(msg, ci);
     }
     
