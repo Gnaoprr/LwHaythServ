@@ -2798,7 +2798,7 @@ namespace server
 			char GeoIP_Player_Connected_Message[MAXTRANS];
 			formatstring(GeoIP_Player_Connected_Message)("\fs\f3>>> \f1Player \fr%s\fs\f4(\f5%i\f4)\fr is fragging in \fs\f1%s\fr!", colorname(ci), ci->clientnum, _na_country(GeoIP_country_name_by_addr(_gi, _ip), _ip));
 			char GeoIP_Player_Connected_Message_Admin[MAXTRANS];
-			formatstring(GeoIP_Player_Connected_Message_Admin)("\fs\f3>>> \f1Player \fr%s\fs\f4(\f5%i\f4)\fr is fragging in \fs\f1%s\f4\fr! \f4(\f1IP\f4-\f1Adress\f4: \f5%s\f4)", colorname(ci), ci->clientnum, _na_country(GeoIP_country_name_by_addr(_gi, _ip), _ip));
+			formatstring(GeoIP_Player_Connected_Message_Admin)("\fs\f3>>> \f1Player \fr%s\fs\f4(\f5%i\f4)\fr is fragging in \fs\f1%s\f4\fr! \f4(\f1IP\f4-\f1Adress\f4: \f5%s\f4)", colorname(ci), ci->clientnum, _na_country(GeoIP_country_name_by_addr(_gi, _ip), _ip), _ip);
 			loopv(clients) {
 				clientinfo *_ci = clients[i];
 				if(_ci->privilege >= PRIV_ADMIN) sendf(_ci->clientnum, 1, "ris", N_SERVMSG, GeoIP_Player_Connected_Message_Admin);
