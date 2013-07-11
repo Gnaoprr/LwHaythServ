@@ -1,7 +1,6 @@
 #include "game.h"
 #include "modules.h"
 #include "GeoIP.h"
-#include "GeoIPCity.h"
 
 namespace game
 {
@@ -2761,13 +2760,13 @@ namespace server
     const char *_na_country(const char *a, const char *b) {
 		return a ? a : b;
 	}
-    
+    VAR(usegeoip, 0, 1, 1);
     void connected(clientinfo *ci)
     {
-		GeoIP *gi;
-		gi = GeoIP_open("./GeoLiteCity.dat", GEOIP_STANDARD);
-		GeoIP *_gi;
-		_gi = GeoIP_open("./GeoIP.dat", GEOIP_STANDARD);
+		if(usegeoip) {
+			GeoIP *_gi;
+			_gi = GeoIP_open("./GeoIP.dat", GEOIP_STANDARD);
+		}
         if(m_demo) enddemoplayback();
 
         if(!hasmap(ci)) rotatemap(false);
@@ -2794,21 +2793,20 @@ namespace server
 
         if(m_demo) setupdemoplayback();
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
-		if(gi && _gi) {
+		if(gi) {
 			uint ip = getclientip(ci->clientnum);
 			string _ip;
 			formatstring(_ip)("%i.%i.%i.%i", ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
 			char GeoIP_Player_Connected_Message[MAXTRANS];
-			formatstring(GeoIP_Player_Connected_Message)("\fs\f3>>> \f1Player \fr%s\fs\f4(\f5%i\f4)\fr is fragging in \fs\f1%s\f4, \f1%s\fr!", colorname(ci), ci->clientnum, _na_country(GeoIP_country_name_by_addr(_gi, _ip), _ip), GeoIP_record_by_addr(gi, _ip));
+			formatstring(GeoIP_Player_Connected_Message)("\fs\f3>>> \f1Player \fr%s\fs\f4(\f5%i\f4)\fr is fragging in \fs\f1%s\fr!", colorname(ci), ci->clientnum, _na_country(GeoIP_country_name_by_addr(_gi, _ip), _ip));
 			char GeoIP_Player_Connected_Message_Admin[MAXTRANS];
-			formatstring(GeoIP_Player_Connected_Message_Admin)("\fs\f3>>> \f1Player \fr%s\fs\f4(\f5%i\f4)\fr is fragging in \fs\f1%s\f4, \f1%s\fr! \f4(\f1IP\f4-\f1Adress\f4: \f5%s\f4, \f1IP\f4-\f1Range\f4: %s)", colorname(ci), ci->clientnum, _na_country(GeoIP_country_name_by_addr(_gi, _ip), _ip), GeoIP_record_by_addr(gi, _ip), _ip, GeoIP_range_by_ip(gi, _ip));
+			formatstring(GeoIP_Player_Connected_Message_Admin)("\fs\f3>>> \f1Player \fr%s\fs\f4(\f5%i\f4)\fr is fragging in \fs\f1%s\f4\fr! \f4(\f1IP\f4-\f1Adress\f4: \f5%s\f4)", colorname(ci), ci->clientnum, _na_country(GeoIP_country_name_by_addr(_gi, _ip), _ip));
 			loopv(clients) {
 				clientinfo *_ci = clients[i];
 				if(_ci->privilege >= PRIV_ADMIN) sendf(_ci->clientnum, 1, "ris", N_SERVMSG, GeoIP_Player_Connected_Message_Admin);
 				else sendf(_ci->clientnum, 1, "ris", N_SERVMSG, GeoIP_Player_Connected_Message);
 			}
 			GeoIP_delete(gi);
-			GeoIP_delete(_gi);
 		}
     }
 
