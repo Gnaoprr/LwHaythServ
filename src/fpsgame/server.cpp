@@ -3289,7 +3289,7 @@ namespace server
         return true;
     }
     void _man(const char *cmd, const char *args, clientinfo *ci) {
-		string msg;
+		char msg[MAXTRANS];
 		const char *command_args;
 		const char *command_help;
         bool usage = false;
