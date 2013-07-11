@@ -1,5 +1,7 @@
 #include "game.h"
 #include "modules.h"
+#include "GeoIP.h"
+#include "GeoIPCity.h"
 
 namespace game
 {
@@ -2756,8 +2758,16 @@ namespace server
         }
     }
 
+    const char *_na_country(const char *a, const char *b) {
+		return a ? a : b;
+	}
+    
     void connected(clientinfo *ci)
     {
+		GeoIP *gi;
+		gi = GeoIP_open("./GeoLiteCity.dat", GEOIP_STANDARD);
+		GeoIP *_gi;
+		_gi = GeoIP_open("./GeoIP.dat", GEOIP_STANDARD);
         if(m_demo) enddemoplayback();
 
         if(!hasmap(ci)) rotatemap(false);
@@ -2783,8 +2793,23 @@ namespace server
         aiman::addclient(ci);
 
         if(m_demo) setupdemoplayback();
-
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
+		if(gi && _gi) {
+			uint ip = getclientip(ci->clientnum);
+			string _ip;
+			formatstring(_ip)("%i.%i.%i.%i", ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
+			char GeoIP_Player_Connected_Message[MAXTRANS];
+			formatstring(GeoIP_Player_Connected_Message)("\fs\f3>>> \f1Player \fr%s\fs\f4(\f5%i\f4)\fr is fragging in \fs\f1%s\f4, \f1%s\fr!", colorname(ci), ci->clientnum, _na_country(GeoIP_country_name_by_addr(_gi, _ip), _ip), GeoIP_record_by_addr(gi, _ip));
+			char GeoIP_Player_Connected_Message_Admin[MAXTRANS];
+			formatstring(GeoIP_Player_Connected_Message_Admin)("\fs\f3>>> \f1Player \fr%s\fs\f4(\f5%i\f4)\fr is fragging in \fs\f1%s\f4, \f1%s\fr! \f4(\f1IP\f4-\f1Adress\f4: \f5%s\f4, \f1IP\f4-\f1Range\f4: %s)", colorname(ci), ci->clientnum, _na_country(GeoIP_country_name_by_addr(_gi, _ip), _ip), GeoIP_record_by_addr(gi, _ip), _ip, GeoIP_range_by_ip(gi, _ip));
+			loopv(clients) {
+				clientinfo *_ci = clients[i];
+				if(_ci->privilege >= PRIV_ADMIN) sendf(_ci->clientnum, 1, "ris", N_SERVMSG, GeoIP_Player_Connected_Message_Admin);
+				else sendf(_ci->clientnum, 1, "ris", N_SERVMSG, GeoIP_Player_Connected_Message);
+			}
+			GeoIP_delete(gi);
+			GeoIP_delete(_gi);
+		}
     }
 
     
@@ -2796,7 +2821,7 @@ namespace server
     void _debug(const char *msg)
     {
         string buf;
-        formatstring(buf)("\fs\f1[DEBUG] %s\fr", msg?msg:"");
+        formatstring(buf)("\fs\f3>>> \f4[\f1DEBUG\f4] %s\fr", msg?msg:"");
         sendf(-1, 1, "ris", N_SERVMSG, buf);
     }
 
@@ -3294,9 +3319,7 @@ namespace server
 		const char *command_help;
         bool usage = false;
         
-		if(!args || !*args) {
-            string msg;
-            
+		if(!args || !*args) {            
             formatstring(msg)("\fs\f3>>> \f4[\f1MAN\f4] \f1Available commands:\n\f7");
             strcat(msg, "stats, pm, man, help, usage, info, version");
             if(_getpriv(ci)>=PRIV_MASTER) {
@@ -4137,12 +4160,12 @@ namespace server
         clientinfo *cx = getinfo(cn);
         if(!cx)
         {
-            formatstring(msg)("\f3>>> \f4[\f1GETIP: \f2FAIL\f4] \f3Unknown client number \f0%i", cn);
+            formatstring(msg)("\f3>>> \f4[\f1GETIP\f4: \f2FAIL\f4] \f3Unknown client number \f0%i", cn);
             _notify(msg, ci);
             return;
         }
         uint ip = getclientip(cx->clientnum);
-        formatstring(msg)("\fs\f1[IP:\f0%i\f1:\f7%s\f1] \f5%i.%i.%i.%i\fr", cn, colorname(cx), ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
+        formatstring(msg)("\fs\f3>>> \f4[\f1IP:\f0%i\f1:\f7%s\f4] \f5%i.%i.%i.%i\fr", cn, colorname(cx), ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
         sendf(ci?ci->clientnum:-1, 1, "ris", N_SERVMSG, msg);
     }
     
@@ -4151,6 +4174,47 @@ namespace server
         defformatstring(msg)("\f3>>> \fs\f4[\f5INFO\f4] \f1LwHaythServ - Lightweight version of HaythServ servermod based on zeromod\fr.");
         sendf(ci?ci->clientnum:-1, 1, "ris", N_SERVMSG, msg);
     }
+	
+	/* char *_cx_na(float p)
+	{
+		char *_return;
+		if(!p) formatstring(_return)("%s", "N/A");
+		else formatstring(_return)("%f", p);
+		return _return;
+	}
+    
+    void _GeoIP_client(const char *cmd, const char *args, clientinfo *ci) {
+		GeoIP *gi;
+		gi = GeoIP_open("./GeoLiteCity.dat", GEOIP_STANDARD);
+		GeoIP *_gi;
+		_gi = GeoIP_open("./GeoIP.dat", GEOIP_STANDARD);
+		char msg[MAXTRANS];
+		if(!args || !*args)
+        {
+            _man("usage", cmd, ci);
+            return;
+        }
+        int cn = atoi(args);
+        if(!cn && strcmp(args, "0"))
+        {
+            _man("usage", cmd, ci);
+            return;
+        }
+        clientinfo *cx = getinfo(cn);
+		if(!cx) {
+			formatstring(msg)("\fs\f3>>> \f4[\f1GEOIP_CLIENT\f4: \f2FAIL\f4] \f3Unknown client number \f0%i", cn);
+			_notify(msg, ci);
+			return;
+		}
+		if(gi && _gi) {
+			uint ip = getclientip(cx->clientnum);
+			string _ip;
+			GeoIPRecordTag *_cx;
+			formatstring(_ip)("%i.%i%.i%.i", ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
+			formatstring(msg)("\fs\f3>>> \f4[\f1GEOIP_CLIENT\f4: \f2%s\f4(\f5%i\f4)]: \f3IP: \fr\fs%s\f4, \frRange: \fr\fs%s\f4, \f3Country: \fr\fs%s\f4, \f3City: \fr\fs%s\f4, \f3Longitude: \fr\fs%s\f4, \f3Latitude: \fr\f%s", colorname(cx), cx->clientnum, _ip, GeoIP_range_by_ip(_gi, _ip), _na_country(GeoIP_country_name_by_addr(gi, _ip), _ip), GeoIP_record_by_addr(_gi, _ip), _cx_na(_cx->longitude), _cx_na(_cx->latitude));
+			GeoIPRecord_delete(_cx);
+		}
+	} */ // TODO: Fix this
     
 //  >>> Server internals
     
@@ -4204,6 +4268,7 @@ namespace server
         _funcs.add(new _funcdeclaration("editmute", PRIV_MASTER, _editmutefunc));
         _funcs.add(new _funcdeclaration("editunmute", PRIV_MASTER, _editmutefunc));
         _funcs.add(new _funcdeclaration("spy", PRIV_ADMIN, _spyfunc));
+		// _funcs.add(new _funcdeclaration("geoip_client", PRIV_ROOT, _GeoIP_client));
     }
     
     void _privfail(clientinfo *ci)
