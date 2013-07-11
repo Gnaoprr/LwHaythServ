@@ -766,7 +766,7 @@ namespace server
             case PRIV_ADMIN: return "\fs\f6admin\fr";
             case PRIV_AUTH: return "\fs\f0auth\fr";
             case PRIV_MASTER: return "\fs\f0master\fr";
-            case PRIV_ROOT: return "\fs\f1root\fr";
+            case PRIV_ROOT: return "\fs\f3root\fr";
             case PRIV_NONE: return "none";
             default:
                 formatstring(buf)("\fs\f4unknown\f1[\f5%i\f1]\fr", type);
@@ -1441,7 +1441,7 @@ namespace server
         string msg;
         if(val && authname)
         {
-            if(authdesc && authdesc[0] && (strcmp(authdesc, "haythserv") && strcmp(authname, "Haytham"))) formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \fs'%s' \f4[\f0%s\f4]", colorname(ci), name, authname, authdesc);
+            if(authdesc && authdesc[0] && (strcmp(authdesc, "haythserv") && strcmp(authname, "Haytham"))) formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \f5'%s' \f4[\f0%s\f4]", colorname(ci), name, authname, authdesc);
             else formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \f5'%s'", colorname(ci), name, authname);
         } 
         else formatstring(msg)("\fs\f3>>> \fr\fs%s %s \fr%s", colorname(ci), val ? "\f3claimed" : "\f1relinquished", name);
