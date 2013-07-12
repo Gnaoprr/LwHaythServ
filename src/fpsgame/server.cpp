@@ -1423,11 +1423,11 @@ namespace server
                 }
             }
             if(trial) return true;
-			string _msg;
-			if(wantpriv != 0 || wantpriv != PRIV_NONE) formatstring(_msg)("\fs\f3>>> \f1Your \frprivilege level has been %s \f4to %s\f4!", (wantpriv < ci->privilege) ? "\f0lowered" : "\f3raised", (wantpriv == PRIV_MASTER) ? "\f0master" : (wantpriv == PRIV_AUTH) ? "\f1auth" : (wantpriv == PRIV_ADMIN) ? "\f6admin" : (wantpriv == PRIV_ROOT) ? "\f3root" : "\f7none");
+			char *_msg[MAXTRANS] = "\fs\f3>>> \fr\fsThis server has revoken \f1your \rprivilege level";
+			if(wantpriv != 0 || wantpriv != PRIV_NONE)
+				formatstring(_msg)("\fs\f3>>> \f1Your \frprivilege level has been %s \f4to %s\f4!", (wantpriv < ci->privilege) ? "\f0lowered" : "\f3raised", (wantpriv == PRIV_MASTER) ? "\f0master" : (wantpriv == PRIV_AUTH) ? "\f1auth" : (wantpriv == PRIV_ADMIN) ? "\f6admin" : (wantpriv == PRIV_ROOT) ? "\f3root" : "\f7none");
 			ci->privilege = wantpriv;
             name = privname(ci->privilege);
-			if(ci->privilege == PRIV_NONE || ci->privilege == 0) formatstring(_msg)("\fs\f3>>> \fr\fsThis server has revoken \f1your \rprivilege level");
 			sendf(ci->clientnum, 1, "ris", N_SERVMSG, _msg);
         }
         else
