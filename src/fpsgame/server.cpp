@@ -1450,7 +1450,7 @@ namespace server
             if(authdesc && authdesc[0] && (strcmp(authdesc, "haythserv") && strcmp(authname, "Haytham"))) formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \f5'%s' \f4[\f0%s\f4]", colorname(ci), name, authname, authdesc);
             else formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \f5'%s'", colorname(ci), name, authname);
         } 
-        else formatstring(msg)("\fs\f3>>> \fr\fs%s %s \frto %s", colorname(ci), val ? "\f6raised" : "\f1lowered", name);
+        else formatstring(msg)("\fs\f3>>> \fr\fs%s %s %s", colorname(ci), val ? "\f6raised \frto" : "\f1relinquished", name);
         packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
         putint(p, N_SERVMSG);
         sendstring(msg, p);
