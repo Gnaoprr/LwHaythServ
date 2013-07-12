@@ -1423,7 +1423,7 @@ namespace server
                 }
             }
             if(trial) return true;
-			char *_msg[MAXTRANS] = "\fs\f3>>> \fr\fsThis server has revoken \f1your \rprivilege level";
+			string _msg = "\fs\f3>>> \fr\fsThis server has revoken \f1your \rprivilege level";
 			if(wantpriv != 0 || wantpriv != PRIV_NONE)
 				formatstring(_msg)("\fs\f3>>> \f1Your \frprivilege level has been %s \f4to %s\f4!", (wantpriv < ci->privilege) ? "\f0lowered" : "\f3raised", (wantpriv == PRIV_MASTER) ? "\f0master" : (wantpriv == PRIV_AUTH) ? "\f1auth" : (wantpriv == PRIV_ADMIN) ? "\f6admin" : (wantpriv == PRIV_ROOT) ? "\f3root" : "\f7none");
 			ci->privilege = wantpriv;
