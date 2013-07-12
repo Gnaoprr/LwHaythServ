@@ -57,12 +57,12 @@ int on_connect(struct hookparam *hp)
     
     char *country = GeoIP_country_name_by_addr(gi, addr);
     
-    sprintf(msg, "\f5[GeoIP] \f7%s \f2is connected from \f0%s \f4(\f6IP\f4-\f6Address\f4: \f5%s\f4)", name, country?:"Unknown", addr);
+    sprintf(msg, "\f3>>> \f1%s \f2is fragging in \f1%s\f4, \f1Unknown\f4. (\f7IP\f4-\f7Address\f4: \f5%s\f4)", name, country?:"Unknown", addr);
     notifypriv(msg, PRIV_AUTH, PRIV_ROOT);
     
     if(!country) return 0;
     
-    sprintf(msg, "\f5[GeoIP] \f7%s \f2is connected from \f0%s", name, country);
+    sprintf(msg, "\f3>>> \f1%s \f2is fragging in \f1%s\f4, \f1Unknown\f4.", name, country);
     notifypriv(msg, PRIV_NONE, PRIV_MASTER);
     
     return 0;

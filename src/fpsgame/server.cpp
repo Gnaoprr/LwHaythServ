@@ -1424,7 +1424,7 @@ namespace server
             }
             if(trial) return true;
 			string _msg;
-			if(wantpriv != 0 || wantpriv != PRIV_NONE) formatstring(_msg)("\fs\f3>>> \f1Your \frprivilege level has been %s \f4to %s\f4!", (wantpriv < ci->privilege) ? "\f0lowered" : "\f3raised", (wantpriv == PRIV_MASTER) ? "\f0master" : (wantpriv == PRIV_AUTH) ? "\f1auth" : (wantpriv == PRIV_ADMIN) ? "\f6admin" : "\f3root");
+			if(wantpriv != 0 || wantpriv != PRIV_NONE) formatstring(_msg)("\fs\f3>>> \f1Your \frprivilege level has been %s \f4to %s\f4!", (wantpriv < ci->privilege) ? "\f0lowered" : "\f3raised", (wantpriv == PRIV_MASTER) ? "\f0master" : (wantpriv == PRIV_AUTH) ? "\f1auth" : (wantpriv == PRIV_ADMIN) ? "\f6admin" : (wantpriv == PRIV_ROOT) ? "\f3root" : "\f7none");
 			ci->privilege = wantpriv;
             name = privname(ci->privilege);
 			if(ci->privilege == PRIV_NONE || ci->privilege == 0) formatstring(_msg)("\fs\f3>>> \fr\fsThis server has revoken \f1your \rprivilege level");
@@ -2764,7 +2764,7 @@ namespace server
     
     void connected(clientinfo *ci)
     {
-	if(m_demo) enddemoplayback();
+        if(m_demo) enddemoplayback();
 
         if(!hasmap(ci)) rotatemap(false);
 
@@ -2789,6 +2789,11 @@ namespace server
         aiman::addclient(ci);
 
         if(m_demo) setupdemoplayback();
+        
+        _hp.args[0] = (void *)getclientip(ci->clientnum);
+        _hp.args[1] = (void *)colorname(ci);
+        _exechook("connected");
+        
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
     }
 
@@ -3797,6 +3802,29 @@ namespace server
     
     vector<_hookstruct *> _hookfuncs;
     
+    int _exechook(const char *name)
+    {
+        bool found=false;
+        int ret;
+        
+        if(!name || !*name) return -1;  //<0==fail
+        for(int i = 0; i < _hookfuncs.length(); i++)
+        {
+            if(_hookfuncs[i] && !strcmp(_hookfuncs[i]->name, name))
+            {
+                found = true;
+                ret = 0;    //==0 - continue, ==1 - dont continue, ==-1 - error (dont continue)
+                for(int j = 0; j < _hookfuncs[i]->funcs.length(); j++)
+                {
+                    ret = _hookfuncs[i]->funcs[j].func(&_hp);
+                    if(ret) break;
+                }
+                break;
+            }
+        }
+        return found?ret:-1;
+    }
+
     int _exechook_s(char *name)
     {
         bool found=false;
