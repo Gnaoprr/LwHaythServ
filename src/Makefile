@@ -1,11 +1,13 @@
 #CXXFLAGS= -O3 -fomit-frame-pointer
-CXXFLAGS= -O2 -pipe -fstack-protector -DGEOIPDATADIR -DGEOIP
+#CXXFLAGS= -O2 -pipe -fstack-protector -DGEOIPDATADIR -DGEOIP
+CFLAGS=-g -O0 -fno-inline -march=native -pipe -fstack-protector
+CXXFLAGS=-g -O0 -fno-inline -march=native -pipe -fstack-protector
 override CXXFLAGS+= -Wall -fsigned-char -fno-exceptions -fno-rtti
 
 PLATFORM= $(shell uname -s)
 PLATFORM_PREFIX= native
 
-INCLUDES= -Ishared -Iengine -Ifpsgame -Ienet/include -Igeoip
+INCLUDES= -Ishared -Iengine -Ifpsgame -Ienet/include
 
 STRIP=
 ifeq (,$(findstring -g,$(CXXFLAGS)))
@@ -117,8 +119,6 @@ SERVER_OBJS= \
 	engine/command-standalone.o \
 	engine/server-standalone.o \
 	engine/worldio-standalone.o \
-	geoip/GeoIP-standalone.o \
-        geoip/GeoIPCity-standalone.o \
 	fpsgame/entities-standalone.o \
 	fpsgame/server-standalone.o
 #	engine/world-standalone.o \
@@ -188,8 +188,6 @@ client:	libenet $(CLIENT_OBJS)
 	$(CXX) $(CXXFLAGS) -o sauer_client $(CLIENT_OBJS) $(CLIENT_LIBS)
 
 server:	libenet $(SERVER_OBJS)
-	gcc -O2 -pipe -fstack-protector -DGEOIPDATADIR -DGEOIP -Wall -fsigned-char -fno-exceptions -DSTANDALONE -Igeoip -c -o geoip/GeoIP-standalone.o geoip/GeoIP.c
-	gcc -O2 -pipe -fstack-protector -DGEOIPDATADIR -DGEOIP -Wall -fsigned-char -fno-exceptions -DSTANDALONE -Ishared -Iengine -Ifpsgame -Ienet/include -Igeoip -c -o geoip/GeoIPCity-standalone.o geoip/GeoIPCity.c
 	$(CXX) $(CXXFLAGS) -o sauer_server $(SERVER_OBJS) $(SERVER_LIBS)  
 	
 master: libenet $(MASTER_OBJS)
@@ -494,9 +492,6 @@ fpsgame/server-standalone.o: fpsgame/aiman.h fpsgame/modules.h
 engine/master-standalone.o: shared/cube.h shared/tools.h shared/geom.h
 engine/master-standalone.o: shared/ents.h shared/command.h shared/iengine.h
 engine/master-standalone.o: shared/igame.h
-
-geoip/GeoIP-standalone.o: geoip/GeoIP.c
-geoip/GeoIPCity-standalone.o: geoip/GeoIPCity.c
 
 #engine/world-standalone.o: engine/engine.h shared/cube.h shared/tools.h shared/geom.h
 #engine/world-standalone.o: shared/ents.h shared/command.h shared/iengine.h
