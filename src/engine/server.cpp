@@ -318,7 +318,7 @@ const char *disconnectreason(int reason)
         default: return NULL;
     }
 }
-
+VAR(serverhidebanned, 0, 0, 1);
 void disconnect_client(int n, int reason)
 {
     if(!clients.inrange(n) || clients[n]->type!=ST_TCPIP) return;
@@ -327,9 +327,10 @@ void disconnect_client(int n, int reason)
     delclient(clients[n]);
     const char *msg = disconnectreason(reason);
     string s;
-    if(msg) formatstring(s)("client (%s) disconnected because: %s", clients[n]->hostname, msg);
-    else formatstring(s)("client (%s) disconnected", clients[n]->hostname);
+    if(msg) formatstring(s)("\fs\f3>>> \fr\fsClient \f4(\f5%s\f4) \fr\fsdisconnected because\f4: \fr%s", clients[n]->hostname, msg);
+    else formatstring(s)("\fs\f3>>> \fr\fsClient \f4(\f5%sf4) \frdisconnected", clients[n]->hostname);
     logoutf("%s", s);
+	if(serverhidebanned && reason==DISC_IPBAN) return;
     server::sendservmsg(s);
 }
 
