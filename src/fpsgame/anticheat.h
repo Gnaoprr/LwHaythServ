@@ -11,7 +11,7 @@ namespace server {
 	void cheat_detected(clientinfo *ci, const char *_cheat, int cheatprob, bool publicreport, bool banforcheat) {
 		ci->_xi.cheating += cheatprob;
 		if(publicreport) notifycheater(ci, "\f3>>> \f4[\f3CHEATER \f6detection\f4] \f7Player \f1%s \f7is \f3cheating\f4! (\f3Cheat-Type\f4: \f6%s\f4, \f0%i\f4%%)", ci->name, _cheat, ci->_xi.cheating);
-		else notifypriv(3, 4, "\f3>>> \f4[\f3CHEATER \f6detection\f4] \f7Player \f1%s \f7is \f3cheating\f4! (\f3Cheat-Type\f4: \f6%s\f4, \f0%i\f4%%)", ci->name, _cheat, ci->_xi.cheating);
+		else notifypriv(PRIV_ADMIN, PRIV_ROOT, "\f3>>> \f4[\f3CHEATER \f6detection\f4] \f7Player \f1%s \f7is \f3cheating\f4! (\f3Cheat-Type\f4: \f6%s\f4, \f0%i\f4%%)", ci->name, _cheat, ci->_xi.cheating);
 		if(ci->_xi.cheating >= 100) {
 			if(banforcheat) cheating_kick(ci);
 			else {
