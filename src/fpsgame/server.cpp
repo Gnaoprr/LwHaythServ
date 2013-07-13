@@ -235,6 +235,8 @@ namespace server
         int tcmessagewait;
         int tcmsg_sended;
         int cheating;
+        int lastping;
+        int lastsameping;
     };
     
     struct clientinfo
@@ -1535,10 +1537,10 @@ namespace server
     }
     VAR(cheatingbanhours, 3, 6, 9);
     void cheating_kick(clientinfo *ci) {
+        sendservmsgf("\f3>>> \f1%s \f7got kicked for \f3cheating\f4.", ci->name);
         uint ip = getclientip(ci->clientnum);
         addban(ip, cheatingbanhours*60*60000);
         disconnect_client(ci->clientnum, DISC_KICK);
-        sendservmsgf("\f3>>> \f1%s \f7got kicked for \f3cheating\f4.", ci->name);
     }
 
     savedscore *findscore(clientinfo *ci, bool insert)
@@ -3342,6 +3344,13 @@ namespace server
         sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, msg);
     }
 
+    void notifycheater(clientinfo *ci, const char *msg ...)
+    {
+        char *_msg[1024];
+        formatstring(_msg)(msg, msg);
+        loopv(clients) if(clients[i] && clients[i] != ci) sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, _msg);
+    }
+
     void notifypriv(int min, int max, const char *msg, ...)
     {
         loopv(clients) if(clients[i] && (clients[i]->privilege>=min) && (clients[i]->privilege<=max)) sendservmsgf(msg, msg);
@@ -4535,10 +4544,15 @@ namespace server
     VAR(remiplimitsecs, 1, 5, 25);
     VAR(servermessagelimit, 1, 1, 5);
     VAR(messagewaitseconds, 1, 1, 10);
+
+    // Cheats control functions //
+
     extern void editmode_in_non_coop_edit(clientinfo *ci);
-    extern void edit_packets_in_non_coop_edit(clientinfo *ci, char *packet);
+    extern void edit_packets_in_non_coop_edit(clientinfo *ci, const char *packet);
     extern void unknown_sound(clientinfo *ci, int sound);
     extern void wrong_message_size(clientinfo *ci, int size);
+    extern void ping_hack(clientinfo *ci, int ping);
+
     void parsepacket(int sender, int chan, packetbuf &p)     // has to parse exactly each byte of the packet
     {
         if(sender<0 || p.packet->flags&ENET_PACKET_FLAG_UNSEQUENCED || chan > 2) return;
@@ -4619,6 +4633,13 @@ namespace server
         int curmsg;
         while((curmsg = p.length()) < p.maxlen) switch(type = checktype(getint(p), ci))
         {
+            case N_SOUND:
+            {
+                int sound = getint(p);
+                unknown_sound(ci, sound);
+                break;
+            }
+
             case N_POS:
             {
                 int pcn = getuint(p); 
@@ -4766,7 +4787,7 @@ namespace server
                 int gunselect = getint(p);
                 ffa_weapons_in_instagib(ci, gunselect);
                 if(!cq || cq->state.state!=CS_ALIVE) break;
-                cq->state.gunselect = gunselect >= GUN_FIST && gunselect <= GUN_PISTOL ? gunselect : GUN_FIST;
+                cq->state.gunselect = (gunselect >= GUN_FIST && gunselect <= GUN_PISTOL) ? gunselect : GUN_FIST;
                 QUEUE_AI;
                 QUEUE_MSG;
                 break;
@@ -4778,7 +4799,7 @@ namespace server
                 if(!cq || (cq->state.state!=CS_ALIVE && cq->state.state!=CS_DEAD) || ls!=cq->state.lifesequence || cq->state.lastspawn<0 || cq->_xi.spy) break;
                 cq->state.lastspawn = -1;
                 cq->state.state = CS_ALIVE;
-                cq->state.gunselect = gunselect >= GUN_FIST && gunselect <= GUN_PISTOL ? gunselect : GUN_FIST;
+                cq->state.gunselect = (gunselect >= GUN_FIST && gunselect <= GUN_PISTOL) ? gunselect : GUN_FIST;
                 cq->exceeded = 0;
                 if(smode) smode->spawned(cq);
                 QUEUE_AI;
@@ -5012,15 +5033,13 @@ namespace server
             {
                 int size = server::msgsizelookup(type);
                 wrong_message_size(ci, size);
-                char *_type;
-                if(type == N_EDITF) _type = "N_EDITF";
-                else if(type == N_EDITT) _type = "N_EDITT";
-                else if(type == N_EDITM) _type = "N_EDITM";
-                else if(type == N_FLIP) _type = "N_FLIP";
-                else if(type == N_ROTATE) _type = "N_ROTATE";
-                else if(type == N_REPLACE) _type = "N_REPLACE";
-                else if(type == N_DELCUBE) _type = "N_DELCUBE";
-                edit_packets_in_non_coop_edit(ci, _type);
+                if(type == N_EDITF) edit_packets_in_non_coop_edit(ci, "N_EDITF");
+                else if(type == N_EDITT) edit_packets_in_non_coop_edit(ci, "N_EDITT");
+                else if(type == N_EDITM) edit_packets_in_non_coop_edit(ci, "N_EDITM");
+                else if(type == N_FLIP) edit_packets_in_non_coop_edit(ci, "N_FLIP");
+                else if(type == N_ROTATE) edit_packets_in_non_coop_edit(ci, "N_ROTATE");
+                else if(type == N_REPLACE) edit_packets_in_non_coop_edit(ci, "N_REPLACE");
+                else if(type == N_DELCUBE) edit_packets_in_non_coop_edit(ci, "N_DELCUBE");
                 // if(size<=0) { disconnect_client(sender, DISC_MSGERR); return; }
                 loopi(size-1) getint(p);
                 // if(!m_edit) { disconnect_client(sender, DISC_MSGERR); return; }
@@ -5064,7 +5083,8 @@ namespace server
                 loopk(3) getint(p);
                 int type = getint(p);
                 loopk(5) getint(p);
-                if(!m_edit) { disconnect_client(sender, DISC_MSGERR); return; }
+                edit_packets_in_non_coop_edit(ci, "N_EDITENT");
+                // if(!m_edit) { disconnect_client(sender, DISC_MSGERR); return; }
                 if(!ci || ci->state.state==CS_SPECTATOR) break;
                 if(ci->_xi.editmute)
                 {
@@ -5101,7 +5121,8 @@ namespace server
                     case ID_FVAR: getfloat(p); break;
                     case ID_SVAR: getstring(text, p);
                 }
-                if(!m_edit) { disconnect_client(sender, DISC_MSGERR); return; }
+                edit_packets_in_non_coop_edit(ci, "N_EDITVAR");
+                // if(!m_edit) { disconnect_client(sender, DISC_MSGERR); return; }
                 if(ci && ci->_xi.editmute)
                 {
                     if(!ci->_xi.editmutewarn || ci->_xi.editmutewarn < totalmillis)
@@ -5125,6 +5146,7 @@ namespace server
                 if(ci)
                 {
                     ci->ping = ping;
+                    ping_hack(ci, ping);
                     loopv(ci->bots) ci->bots[i]->ping = ping;
                 }
                 QUEUE_MSG;
