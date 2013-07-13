@@ -62,7 +62,7 @@ int on_connect(struct hookparam *hp)
     
     if(!country) return 0;
     
-    sprintf(msg, "\f3>>> \f1%s \f2is fragging in \f1%s\f4, \f1Unknown\f4.", name, country);
+    sprintf(msg, "\f3>>> \f1%s \f2is fragging in \f1%s\f4, \f1Unknown\f4.", name, country?:"Unknown");
     notifypriv(msg, PRIV_NONE, PRIV_MASTER);
     
     return 0;

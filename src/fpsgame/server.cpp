@@ -12,15 +12,13 @@ namespace game
             if(!server::serveroption(args[i]))
                 conoutf(CON_ERROR, "unknown command-line option: %s", args[i]);
     }
-
     const char *gameident() { return "fps"; }
 }
 
 extern ENetAddress masteraddress;
-
 namespace server
 {
-	struct _hookparam
+    struct _hookparam
     {
         void *args[8];
     } __attribute__((packed));
@@ -218,7 +216,8 @@ namespace server
     };
 
     extern int gamemillis, nextexceeded;
-
+    struct clientinfo;
+    extern void ffa_weapons_in_instagib(clientinfo *ci, int gun);
     struct _extrainfo
     {
         bool mute;
@@ -228,7 +227,14 @@ namespace server
         bool fakeprivon;
         int fakepriv;
         bool spy;
-		int failpass;
+        int failpass;
+        int remipsdone;
+        int remipswait;
+        int messagewait;
+        int msg_sended;
+        int tcmessagewait;
+        int tcmsg_sended;
+        int cheating;
     };
     
     struct clientinfo
@@ -263,7 +269,6 @@ namespace server
 
         clientinfo() : getdemo(NULL), getmap(NULL), clipboard(NULL), authchallenge(NULL), authkickreason(NULL) { reset(); }
         ~clientinfo() { events.deletecontents(); cleanclipboard(); cleanauth(); }
-
         void addevent(gameevent *e)
         {
             if(state.state==CS_SPECTATOR || events.length()>100) delete e;
@@ -641,21 +646,21 @@ namespace server
     VAR(servergamespeed, 10, 100, 1000);
     FVAR(servergamelimit, 1.0, 10.0, 1440.0);  //max is 24 hours
     VAR(serverovertime, 0, 0, 1);
-	VAR(servercheckgbans, 0, 1, 2);
+    VAR(servercheckgbans, 0, 1, 2);
     
     SVAR(serverdesc, "");
     SVAR(serverpass, "");
     SVAR(adminpass, "");
-	SVAR(authpass, "");
-	SVAR(masterpass, "");
+    SVAR(authpass, "");
+    SVAR(masterpass, "");
     VARF(publicserver, 0, 0, 2, {
-		switch(publicserver)
-		{
-			case 0: default: mastermask = MM_PRIVSERV; break;
-			case 1: mastermask = MM_PUBSERV; break;
-			case 2: mastermask = MM_COOPSERV; break;
-		}
-	});
+        switch(publicserver)
+        {
+            case 0: default: mastermask = MM_PRIVSERV; break;
+            case 1: mastermask = MM_PUBSERV; break;
+            case 2: mastermask = MM_COOPSERV; break;
+        }
+    });
     SVAR(servermotd, "");
 
     struct teamkillkick
@@ -1430,7 +1435,7 @@ namespace server
             bool hasmasterpass = masterpass[0] && checkpassword(ci, masterpass, pass);
             if(pass && pass[0] && !hasadminpass && !hasauthpass && !hasmasterpass) ci->_xi.failpass++;
             int wantpriv = ci->local?PRIV_ROOT:(ci->_xi.failpass>=servermaxtries)?authpriv:hasadminpass?PRIV_ADMIN:hasauthpass?PRIV_AUTH:hasmasterpass?PRIV_MASTER:authpriv;
-			if(ci->_xi.failpass<servermaxtries) ci->privilege == PRIV_NONE;
+            if(ci->_xi.failpass<servermaxtries) ci->privilege == PRIV_NONE;
             if(ci->privilege)
             {
                 if(wantpriv == ci->privilege) return true;
@@ -1454,12 +1459,12 @@ namespace server
                 }
             }
             if(trial) return true;
-			string _msg = "\fs\f3>>> \fr\fsThis server has revoken \f1your \rprivilege level";
-			if(wantpriv != 0 || wantpriv != PRIV_NONE)
-				formatstring(_msg)("\fs\f3>>> \f1Your \frprivilege level has been %s \f4to %s\f4!", (wantpriv < ci->privilege) ? "\f0lowered" : "\f3raised", (wantpriv == PRIV_MASTER) ? "\f0master" : (wantpriv == PRIV_AUTH) ? "\f1auth" : (wantpriv == PRIV_ADMIN) ? "\f6admin" : (wantpriv == PRIV_ROOT) ? "\f3root" : "\f7none");
-			ci->privilege = wantpriv;
+            string _msg = "\fs\f3>>> \fr\fsThis server has revoken \f1your \rprivilege level";
+            if(wantpriv != 0 || wantpriv != PRIV_NONE)
+                formatstring(_msg)("\fs\f3>>> \f1Your \frprivilege level has been %s \f4to %s\f4!", (wantpriv < ci->privilege) ? "\f0lowered" : "\f3raised", (wantpriv == PRIV_MASTER) ? "\f0master" : (wantpriv == PRIV_AUTH) ? "\f1auth" : (wantpriv == PRIV_ADMIN) ? "\f6admin" : (wantpriv == PRIV_ROOT) ? "\f3root" : "\f7none");
+            ci->privilege = wantpriv;
             name = privname(ci->privilege);
-			sendf(ci->clientnum, 1, "ris", N_SERVMSG, _msg);
+            sendf(ci->clientnum, 1, "ris", N_SERVMSG, _msg);
         }
         else
         {
@@ -1527,6 +1532,13 @@ namespace server
             }
         }
         return false;
+    }
+    VAR(cheatingbanhours, 3, 6, 9);
+    void cheating_kick(clientinfo *ci) {
+        uint ip = getclientip(ci->clientnum);
+        addban(ip, cheatingbanhours*60*60000);
+        disconnect_client(ci->clientnum, DISC_KICK);
+        sendservmsgf("\f3>>> \f1%s \f7got kicked for \f3cheating\f4.", ci->name);
     }
 
     savedscore *findscore(clientinfo *ci, bool insert)
@@ -2490,7 +2502,13 @@ namespace server
         {
             clientinfo *ci = clients[i];
             if(ci->state.state==CS_SPECTATOR || ci->state.aitype != AI_NONE || ci->clientmap[0] || ci->mapcrc >= 0 || (req < 0 && ci->warned)) continue;
-            formatstring(msg)("%s has modified map \"%s\"", colorname(ci), smapname);
+            formatstring(msg)("\f3>>> \f1%s \f7is using a modified map \f4(\f5\"%s\"\f4)\f7", colorname(ci), smapname);
+            ci->_xi.forcedspectator = true;
+            if(ci->state.state==CS_ALIVE) suicide(ci);
+            if(smode) smode->leavegame(ci);
+            ci->state.state = CS_SPECTATOR;
+            ci->state.timeplayed += lastmillis - ci->state.lasttimeplayed;
+            sendf(-1, 1, "ri3", N_SPECTATOR, ci->clientnum, true);
             sendf(req, 1, "ris", N_SERVMSG, msg);
             if(req < 0) ci->warned = true;
         }
@@ -2502,7 +2520,13 @@ namespace server
             {
                 clientinfo *ci = clients[j];
                 if(ci->state.state==CS_SPECTATOR || ci->state.aitype != AI_NONE || !ci->clientmap[0] || ci->mapcrc != info.crc || (req < 0 && ci->warned)) continue;
-                formatstring(msg)("%s has modified map \"%s\"", colorname(ci), smapname);
+                formatstring(msg)("\f3>>> \f1%s \f7is using a modified map \f4(\f5\"%s\"\f4)\f7", colorname(ci), smapname);
+                ci->_xi.forcedspectator = true;
+                if(ci->state.state==CS_ALIVE) suicide(ci);
+                if(smode) smode->leavegame(ci);
+                ci->state.state = CS_SPECTATOR;
+                ci->state.timeplayed += lastmillis - ci->state.lasttimeplayed;
+                sendf(-1, 1, "ri3", N_SPECTATOR, ci->clientnum, true);
                 sendf(req, 1, "ris", N_SERVMSG, msg);
                 if(req < 0) ci->warned = true;
             }
@@ -2635,7 +2659,7 @@ namespace server
             if(checkgban(getclientip(ci->clientnum))) disconnect_client(ci->clientnum, DISC_IPBAN);
         }
     }
-       
+
     int allowconnect(clientinfo *ci, const char *pwd = "")
     {
         if(ci->local) return DISC_NONE;
@@ -2646,7 +2670,7 @@ namespace server
             return DISC_NONE;
         }
         if(adminpass[0] && checkpassword(ci, adminpass, pwd)) return DISC_NONE;
-		if(authpass[0] && checkpassword(ci, authpass, pwd)) return DISC_NONE;
+        if(authpass[0] && checkpassword(ci, authpass, pwd)) return DISC_NONE;
         if(masterpass[0] && checkpassword(ci, masterpass, pwd)) return DISC_NONE;
 
         if(numclients(-1, false, true)>=maxclients) return DISC_MAXCLIENTS;
@@ -2813,7 +2837,6 @@ namespace server
             }
         }
     }
-    
     void connected(clientinfo *ci)
     {
         
@@ -2888,7 +2911,7 @@ namespace server
         _V_VERBOSE
     };
     
-	struct _funcdeclaration
+    struct _funcdeclaration
     {
         string name;    //function name
         int priv;       //privilege required to call function
@@ -2903,7 +2926,7 @@ namespace server
         void (*func)(const char *cmd, const char *args, clientinfo *ci);
     };
     vector<_funcdeclaration *> _funcs;
-	
+    
     struct _var_sec
     {
         _var_sec() {}
@@ -3317,6 +3340,11 @@ namespace server
     {
         loopv(clients) if(clients[i] && (clients[i]->privilege>=min) && (clients[i]->privilege<=max))
         sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, msg);
+    }
+
+    void notifypriv(int min, int max, const char *msg, ...)
+    {
+        loopv(clients) if(clients[i] && (clients[i]->privilege>=min) && (clients[i]->privilege<=max)) sendservmsgf(msg, msg);
     }
     
     int _argsep(char *str, int c, char *argv[], char sep = ' ') //separate args (str = source string; c = expected argc; argv = ptrs array; ret = argc)
@@ -3968,7 +3996,7 @@ namespace server
     void * _getext(char *s)
     {
         if(!strcmp(s, "test")) return (void *)_testfunc;
-		else if(!strcmp(s, "addhook")) return (void *)_addhook;
+        else if(!strcmp(s, "addhook")) return (void *)_addhook;
         else if(!strcmp(s, "sendf")) return (void *)sendf;
         else if(!strcmp(s, "notifypriv")) return (void *)_notifypriv;
         else
@@ -3997,13 +4025,13 @@ namespace server
         char *argv[2];
         char buf[MAXTRANS];
         bool needload;
-		bool needunload;
+        bool needunload;
         string fname;
         
         if(!args || !*args) return;
         
         needload = (!cmd || !*cmd || !strcmp(cmd, "load") || !strcmp(cmd, "reload"));
-		needunload = (cmd && *cmd && (!strcmp(cmd, "reload") || !strcmp(cmd, "unload")));
+        needunload = (cmd && *cmd && (!strcmp(cmd, "reload") || !strcmp(cmd, "unload")));
         
         strcpy(buf, args);
         
@@ -4071,7 +4099,7 @@ namespace server
             }
             if(needunload)
             {
-				char *(*uninitfunc)();
+                char *(*uninitfunc)();
                 *(void **)(&uninitfunc) = Z_GETSYM(m->h, "z_uninit");
                 if(uninitfunc)
                 {
@@ -4503,7 +4531,14 @@ namespace server
     ICOMMAND(zset, "C", (char *cmd), _set("set", cmd, 0));
     
 // ****************************************************************************************
-
+    VAR(serverremiplimit, 5, 5, 10);
+    VAR(remiplimitsecs, 1, 5, 25);
+    VAR(servermessagelimit, 1, 1, 5);
+    VAR(messagewaitseconds, 1, 1, 10);
+    extern void editmode_in_non_coop_edit(clientinfo *ci);
+    extern void edit_packets_in_non_coop_edit(clientinfo *ci, char *packet);
+    extern void unknown_sound(clientinfo *ci, int sound);
+    extern void wrong_message_size(clientinfo *ci, int size);
     void parsepacket(int sender, int chan, packetbuf &p)     // has to parse exactly each byte of the packet
     {
         if(sender<0 || p.packet->flags&ENET_PACKET_FLAG_UNSEQUENCED || chan > 2) return;
@@ -4664,7 +4699,8 @@ namespace server
             case N_EDITMODE:
             {
                 int val = getint(p);
-                if(!ci->local && !m_edit) { disconnect_client(sender, DISC_MSGERR); return; };
+                editmode_in_non_coop_edit(ci);
+                // if(!ci->local && !m_edit) { disconnect_client(sender, DISC_MSGERR); return; };
                 if(val ? ci->state.state!=CS_ALIVE && ci->state.state!=CS_DEAD : ci->state.state!=CS_EDITING) break;
                 if(smode)
                 {
@@ -4728,6 +4764,7 @@ namespace server
             case N_GUNSELECT:
             {
                 int gunselect = getint(p);
+                ffa_weapons_in_instagib(ci, gunselect);
                 if(!cq || cq->state.state!=CS_ALIVE) break;
                 cq->state.gunselect = gunselect >= GUN_FIST && gunselect <= GUN_PISTOL ? gunselect : GUN_FIST;
                 QUEUE_AI;
@@ -4837,18 +4874,31 @@ namespace server
                     {
                         cm->messages.drop();
                         filtertext(text, text);
-                        sendservmsgf("\f3[REMOTE:\f7%s\f3] \f2%s", colorname(ci), text);
+                        sendservmsgf("\f3 >>> \f4[\f6REMOTE\f4:\f7%s\f4] \f2%s", colorname(ci), text);
                     }
                     else if(ci->_xi.mute)
                     {
                         cm->messages.drop();
-                        sendf(sender, 1, "ris", N_SERVMSG, "\f5[MUTE] \f3You are mutted");
+                        sendf(sender, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f5MUTE\f4] \f3You are muted");
                     }
                     else
                     {
-                        filtertext(text, text);
-                        if(isdedicatedserver()) logoutf("%s: %s", colorname(cq), text);
-                        QUEUE_STR(text);
+                        if(((!ci->_xi.messagewait && ci->_xi.msg_sended>=servermessagelimit) || (ci->_xi.messagewait && ci->_xi.tcmsg_sended>servermessagelimit)) && ci->privilege != PRIV_ROOT) {
+                            if(!ci->_xi.messagewait || ci->_xi.messagewait<totalmillis) {
+                                const char *msg[MAXTRANS];
+                                formatstring(msg)("\f3>>> \f4[\f5text messages \f3limit \f5reached\f4] \f7You reached the text messages limit\f4! \f7Wait %i seconds until you can resend your message!", messagewaitseconds);
+                                sendf(sender, 1, "ris", N_SERVMSG, msg);
+                                ci->_xi.messagewait = totalmillis + messagewaitseconds*1000;
+                                if(ci->_xi.messagewait<totalmillis) ci->_xi.msg_sended = 0;
+                            }
+                        } else {
+                            ci->_xi.msg_sended ++;
+                            filtertext(text, text);
+                            if(isdedicatedserver()) logoutf("%s: %s", colorname(cq), text);
+                            QUEUE_STR(text);
+                            ci->_xi.messagewait = totalmillis + messagewaitseconds*1000;
+                            if(ci->_xi.messagewait<totalmillis) ci->_xi.msg_sended = 0;
+                        }
                     }
                 }
                 break;
@@ -4857,17 +4907,29 @@ namespace server
             case N_SAYTEAM:
             {
                 getstring(text, p);
-                if(!ci || !cq || (ci->state.state==CS_SPECTATOR && !ci->local && !ci->privilege) || !m_teammode || !cq->team[0]) break;
-                if(ci->_xi.mute)
-                {
-                    sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\f5[MUTE] \f3You are mutted");
-                    break;
-                }
+                if(!ci || !cq || (ci->state.state==CS_SPECTATOR && !ci->local && !ci->privilege) || !cq->team[0]) break;
                 if(ci->_xi.spy)
                 {
-                    sendservmsgf("\f1[REMOTECHAT:\f7%s\f1] \f0%s", colorname(ci), text);
+                    sendservmsgf("\f3>>> \f4[\f1REMOTECHAT\f4:\f7%s\f4] \f0%s", colorname(ci), text);
                     break;
                 }
+                if(!m_teammode) break;
+                if(ci->_xi.mute)
+                {
+                    sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f5MUTE\f4] \f3You are muted");
+                    break;
+                }
+                if(((!ci->_xi.tcmessagewait && ci->_xi.tcmsg_sended>=servermessagelimit) || (ci->_xi.tcmessagewait && ci->_xi.tcmsg_sended>servermessagelimit)) && ci->privilege != PRIV_ROOT) {
+                    if(!ci->_xi.tcmessagewait || ci->_xi.tcmessagewait<totalmillis) {
+                        const char *msg[MAXTRANS];
+                        formatstring(msg)("\f3>>> \f4[\f5text messages \f3limit \f5reached\f4] \f7You reached the text messages limit\f4! \f7Wait %i seconds until you can resend your message!", messagewaitseconds);
+                        sendf(sender, 1, "ris", N_SERVMSG, msg);
+                        ci->_xi.tcmessagewait = totalmillis + messagewaitseconds*1000;
+                        if(ci->_xi.tcmessagewait<totalmillis) ci->_xi.tcmsg_sended = 0;
+                    }
+                    break;
+                }
+                ci->_xi.tcmsg_sended++;
                 loopv(clients)
                 {
                     clientinfo *t = clients[i];
@@ -4875,6 +4937,8 @@ namespace server
                     sendf(t->clientnum, 1, "riis", N_SAYTEAM, cq->clientnum, text);
                 }
                 if(isdedicatedserver()) logoutf("%s <%s>: %s", colorname(cq), cq->team, text);
+                ci->_xi.tcmessagewait = totalmillis + messagewaitseconds*1000;
+                if(ci->_xi.tcmessagewait<totalmillis) ci->_xi.tcmsg_sended = 0;
                 break;
             }
 
@@ -4947,14 +5011,24 @@ namespace server
             case N_DELCUBE:
             {
                 int size = server::msgsizelookup(type);
-                if(size<=0) { disconnect_client(sender, DISC_MSGERR); return; }
+                wrong_message_size(ci, size);
+                char *_type;
+                if(type == N_EDITF) _type = "N_EDITF";
+                else if(type == N_EDITT) _type = "N_EDITT";
+                else if(type == N_EDITM) _type = "N_EDITM";
+                else if(type == N_FLIP) _type = "N_FLIP";
+                else if(type == N_ROTATE) _type = "N_ROTATE";
+                else if(type == N_REPLACE) _type = "N_REPLACE";
+                else if(type == N_DELCUBE) _type = "N_DELCUBE";
+                edit_packets_in_non_coop_edit(ci, _type);
+                // if(size<=0) { disconnect_client(sender, DISC_MSGERR); return; }
                 loopi(size-1) getint(p);
-                if(!m_edit) { disconnect_client(sender, DISC_MSGERR); return; } //TODO: probably cheater; ban
+                // if(!m_edit) { disconnect_client(sender, DISC_MSGERR); return; }
                 if(ci && ci->_xi.editmute)
                 {
                     if(!ci->_xi.editmutewarn || ci->_xi.editmutewarn < totalmillis)
                     {
-                        sendf(sender, 1, "ris", N_SERVMSG, "\f5[MUTE] \f3Your editing is mutted");
+                        sendf(sender, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f5MUTE\f4] \f3Your editing is muted");
                         ci->_xi.editmutewarn = totalmillis + 10000;
                     }
                     break;
@@ -4965,9 +5039,23 @@ namespace server
             }
             
             case N_REMIP:
-                if(!m_edit) { disconnect_client(sender, DISC_MSGERR); return; }
+                edit_packets_in_non_coop_edit(ci, "N_REMIP");
+                // if(!m_edit) { disconnect_client(sender, DISC_MSGERR); return; }
                 if(!ci || ci->_xi.editmute) break;
-                QUEUE_MSG;
+                if((!ci->_xi.remipswait && ci->_xi.remipsdone >= serverremiplimit) || (ci->_xi.remipswait &&ci->_xi.remipsdone > serverremiplimit)) {
+                    if(!ci->_xi.remipswait || ci->_xi.remipswait <= totalmillis) {
+                        const char *msg[MAXTRANS];
+                        formatstring(msg)("\f3>>> \f4[\f5Remip \f3limit \f5reached\f4] \f1You \f6reached the remip limit\f4! \f6Wait %i seconds until you can remip again\f4!", remiplimitsecs);
+                        sendf(sender, 1, "ris", N_SERVMSG, msg);
+                        ci->_xi.remipswait = totalmillis + remiplimitsecs*1000;
+                        if(ci->_xi.remipswait<totalmillis) ci->_xi.remipsdone = 0;
+                    } 
+                } else {
+                    ci->_xi.remipsdone++;
+                    QUEUE_MSG;
+                    ci->_xi.remipswait = totalmillis + remiplimitsecs*1000;
+                    if(ci->_xi.remipswait<totalmillis) ci->_xi.remipsdone = 0;
+                }
                 break;
             
             case N_EDITENT:
@@ -4982,7 +5070,7 @@ namespace server
                 {
                     if(!ci->_xi.editmutewarn || ci->_xi.editmutewarn < totalmillis)
                     {
-                        sendf(sender, 1, "ris", N_SERVMSG, "\f5[MUTE] \f3Your editing is mutted");
+                        sendf(sender, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f5MUTE\f4] \f3Your editing is muted");
                         ci->_xi.editmutewarn = totalmillis + 10000;
                     }
                     break;
@@ -5018,7 +5106,7 @@ namespace server
                 {
                     if(!ci->_xi.editmutewarn || ci->_xi.editmutewarn < totalmillis)
                     {
-                        sendf(sender, 1, "ris", N_SERVMSG, "\f5[MUTE] \f3Your editing is mutted");
+                        sendf(sender, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f5MUTE\f4] \f3Your editing is muted");
                         ci->_xi.editmutewarn = totalmillis + 10000;
                     }
                     break;
@@ -5199,7 +5287,7 @@ namespace server
                 {
                     if(!ci->_xi.editmutewarn || ci->_xi.editmutewarn < totalmillis)
                     {
-                        sendf(sender, 1, "ris", N_SERVMSG, "\f5[MUTE] \f3Your editing is mutted");
+                        sendf(sender, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f5MUTE\f4] \f3Your editing is muted");
                         ci->_xi.editmutewarn = totalmillis + 10000;
                     }
                     break;
@@ -5329,7 +5417,7 @@ namespace server
                 {
                     if(!ci->_xi.editmutewarn || ci->_xi.editmutewarn < totalmillis)
                     {
-                        sendf(sender, 1, "ris", N_SERVMSG, "\f5[MUTE] \f3Your editing is mutted");
+                        sendf(sender, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f5MUTE\f4] \f3Your editing is muted");
                         ci->_xi.editmutewarn = totalmillis + 10000;
                     }
                     break;
@@ -5351,7 +5439,7 @@ namespace server
                 {
                     if(!ci->_xi.editmutewarn || ci->_xi.editmutewarn < totalmillis)
                     {
-                        sendf(sender, 1, "ris", N_SERVMSG, "\f5[MUTE] \f3Your editing is mutted");
+                        sendf(sender, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f5MUTE\f4] \f3Your editing is muted");
                         ci->_xi.editmutewarn = totalmillis + 10000;
                     }
                     break;
@@ -5407,7 +5495,8 @@ namespace server
             default:
             {
                 int size = server::msgsizelookup(type);
-                if(size<=0) { disconnect_client(sender, DISC_MSGERR); return; }
+                wrong_message_size(ci, size);
+                // if(size<=0) { disconnect_client(sender, DISC_MSGERR); return; }
                 loopi(size-1) getint(p);
                 if(ci && cq && (ci != cq || ci->state.state!=CS_SPECTATOR)) { QUEUE_AI; QUEUE_MSG; }
                 break;
@@ -5456,4 +5545,4 @@ namespace server
 
     #include "aiman.h"
 }
-
+#include "anticheat.h"
