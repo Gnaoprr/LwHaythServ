@@ -21,9 +21,9 @@ namespace server {
 		}
 	}
 
-	// Checks if player is lagged or has not got map //
+	// Checks if player is lagged //
 	bool islagged(clientinfo *ci) {
-		return (ci->state.state == CS_LAGGED && ci->state.state != CS_SPECTATOR && smapname[0] && ci->exceeded);
+		return (ci->state.state == CS_LAGGED && ci->state.state != CS_SPECTATOR && ci->exceeded);
 	}
 
 	// Cheat types //
@@ -37,14 +37,14 @@ namespace server {
 	}
 	// Editmode in non coop edit gamemode //
 	void editmode_in_non_coop_edit(clientinfo *ci) {
-		if(!m_edit && !islagged(ci)) {
+		if(!m_edit && !islagged(ci) && ci->clientmap[0]) {
 			cheat_detected(ci, "Editmode in non coopedit gamemode", 100, true, true);
 		}
 	}
 	// Editmode packets in non coop edit gamemode //
 	void edit_packets_in_non_coop_edit(clientinfo *ci, const char *packet) {
 		char cheat[256];
-		if(!m_edit && !islagged(ci))	 {
+		if(!m_edit && !islagged(ci) && ci->clientmap[0]) {
 			formatstring(cheat)("Edit packets in non coopedit gamemode \f4(\f5%s\f4)\f7", packet);
 			cheat_detected(ci, cheat, 100, true, true);
 		}

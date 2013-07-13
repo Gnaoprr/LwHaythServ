@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "GeoIP.h"
+#include "GeoIPCity.h"
 
 enum { PRIV_NONE = 0, PRIV_MASTER, PRIV_AUTH, PRIV_ADMIN, PRIV_ROOT };
 
@@ -56,13 +57,14 @@ int on_connect(struct hookparam *hp)
     sprintf(addr, "%i.%i.%i.%i", ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
     
     char *country = GeoIP_country_name_by_addr(gi, addr);
+    char *continent = GeoIP_continent_by_id(GeoIP_country_id_by_addr(gi, addr));
     
-    sprintf(msg, "\f3>>> \f1%s \f2is fragging in \f1%s\f4, \f1Unknown\f4. (\f7IP\f4-\f7Address\f4: \f5%s\f4)", name, country?:"Unknown", addr);
+    sprintf(msg, "\f3>>> \f1%s \f2is fragging in \f1%s\f4, \f1%s\f4. (\f7IP\f4-\f7Address\f4: \f5%s\f4)", name, country?:"Unknown", continent?:"Unknown", addr);
     notifypriv(msg, PRIV_AUTH, PRIV_ROOT);
     
     if(!country) return 0;
     
-    sprintf(msg, "\f3>>> \f1%s \f2is fragging in \f1%s\f4, \f1Unknown\f4.", name, country?:"Unknown");
+    sprintf(msg, "\f3>>> \f1%s \f2is fragging in \f1%s\f4, \f1%s\f4.", name, country?:addr, continent?:"Unknown");
     notifypriv(msg, PRIV_NONE, PRIV_MASTER);
     
     return 0;
