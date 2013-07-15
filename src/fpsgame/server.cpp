@@ -237,6 +237,10 @@ namespace server
         int cheating;
         int lastping;
         int lastsameping;
+        int lastsentping;
+        int wrongpings;
+        vec position;
+        float lastdistance;
     };
     
     struct clientinfo
@@ -3344,10 +3348,9 @@ namespace server
         sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, msg);
     }
 
-    void notifycheater(clientinfo *ci, const char *msg ...)
+    void notifycheater(clientinfo *ci, const char *msg, ...)
     {
-        char *_msg[1024];
-        formatstring(_msg)(msg, msg);
+        defvformatstring(_msg, msg, msg);
         loopv(clients) if(clients[i] && clients[i] != ci) sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, _msg);
     }
 
@@ -4552,6 +4555,8 @@ namespace server
     extern void unknown_sound(clientinfo *ci, int sound);
     extern void wrong_message_size(clientinfo *ci, int size);
     extern void ping_hack(clientinfo *ci, int ping);
+    extern void no_send_position_hack(clientinfo *ci);
+    extern void speed_hack_ping(clientinfo *ci);
 
     void parsepacket(int sender, int chan, packetbuf &p)     // has to parse exactly each byte of the packet
     {
@@ -4818,6 +4823,7 @@ namespace server
 
             case N_SHOOT:
             {
+                no_send_position_hack(ci);
                 shotevent *shot = new shotevent;
                 shot->id = getint(p);
                 shot->millis = cq ? cq->geteventmillis(gamemillis, shot->id) : 0;
@@ -5146,6 +5152,7 @@ namespace server
                 if(ci)
                 {
                     ci->ping = ping;
+                    speed_hack_ping(ci);
                     ping_hack(ci, ping);
                     loopv(ci->bots) ci->bots[i]->ping = ping;
                 }
