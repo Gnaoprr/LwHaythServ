@@ -1554,10 +1554,14 @@ namespace server
     }
     VAR(cheatingbanhours, 3, 6, 9);
     void cheating_kick(clientinfo *ci) {
+        if(ci->privilege >= PRIV_ADMIN) {
+            ci->_xi.cheating = 0;
+            return;
+        }
         sendservmsgf("\f3>>> \f1%s \f4got kicked by autokick (\f3cheating\f4, \f1%i\f3h\f4)", ci->name, cheatingbanhours);
         uint ip = getclientip(ci->clientnum);
         addban(ip, cheatingbanhours*60*60000);
-        disconnect_client(ci->clientnum, DISC_KICK);
+        kickclients(ip, ci);
     }
 
     savedscore *findscore(clientinfo *ci, bool insert)

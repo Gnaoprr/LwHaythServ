@@ -56,7 +56,7 @@ namespace server {
 		if(securitylevel <= 3) cheatingprob = 100;
 		else if(securitylevel <= 6 && securitylevel > 3) cheatingprob = 50;
 		else cheatingprob = 25;
-		if(m_insta && (gun == GUN_RIFLE || gun == GUN_FIST) && ffaweaponsininstagib) {
+		if(m_insta && gun != GUN_RIFLE && gun != GUN_FIST && ffaweaponsininstagib) {
 			cheat_detected(ci, "FFA weapons in instagib gamemodes", cheatingprob, true);
 		}
 	}
