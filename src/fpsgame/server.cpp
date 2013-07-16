@@ -241,6 +241,7 @@ namespace server
         int wrongpings;
         vec position;
         float lastdistance;
+        bool team_forced;
     };
     
     struct clientinfo
@@ -1541,7 +1542,7 @@ namespace server
     }
     VAR(cheatingbanhours, 3, 6, 9);
     void cheating_kick(clientinfo *ci) {
-        sendservmsgf("\f3>>> \f1%s \f7got kicked for \f3cheating\f4.", ci->name);
+        sendservmsgf("\f3>>> \f1%s \f4got kicked by autokick (\f3cheating\f3)", ci->name);
         uint ip = getclientip(ci->clientnum);
         addban(ip, cheatingbanhours*60*60000);
         disconnect_client(ci->clientnum, DISC_KICK);
@@ -3348,15 +3349,12 @@ namespace server
         sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, msg);
     }
 
-    void notifycheater(clientinfo *ci, const char *msg, ...)
+    void notifycheater(clientinfo *ci, const char *msg)
     {
-        defvformatstring(_msg, msg, msg);
-        loopv(clients) if(clients[i] && clients[i] != ci) sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, _msg);
-    }
-
-    void notifypriv(int min, int max, const char *msg, ...)
-    {
-        loopv(clients) if(clients[i] && (clients[i]->privilege>=min) && (clients[i]->privilege<=max)) sendservmsgf(msg, msg);
+        loopv(clients) {
+            if(clients[i] && clients[i] != ci)
+                sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, msg);
+        }
     }
     
     int _argsep(char *str, int c, char *argv[], char sep = ' ') //separate args (str = source string; c = expected argc; argv = ptrs array; ret = argc)
@@ -3508,6 +3506,7 @@ namespace server
         _manpages.add(new _manpage("unload", "<module>", "Unloads specified module"));
         _manpages.add(new _manpage("exec", "<cubescript>", "Executes cubescript command"));
         _manpages.add(new _manpage("spy", "[1/0]", "Enters or leaves spy mode"));
+        _manpages.add(new _manpage("persist", "<1/0>", "Persists or unpersists teams"));
     }
     
     void _man(const char *cmd, const char *args, clientinfo *ci) {
@@ -4449,7 +4448,17 @@ namespace server
         defformatstring(msg)("\f3>>> \fs\f4[\f5INFO\f4] \f1LwHaythServ - Lightweight version of HaythServ servermod based on zeromod\fr.");
         sendf(ci?ci->clientnum:-1, 1, "ris", N_SERVMSG, msg);
     }
-    
+    bool _teams_persisted = false;
+    void _persistteams(const char *cmd, const char *args, clientinfo *ci) {
+        if(!args || !*args) {
+            _man("usage", cmd, ci);
+            return;
+        }
+        _teams_persisted = (args == "1") ? true : false;
+        char msg[128];
+        formatstring(msg)("\f3>>> \fs\f4[\f5INFO\f4] \f1Teams \fr\fsgot \f3%s\fr.", _teams_persisted ? "persisted" : "unpersisted");
+        sendf(-1, 1, "ris", N_SERVMSG, msg);
+    }
 //  >>> Server internals
     
     void _initfuncs()
@@ -4486,6 +4495,7 @@ namespace server
         _funcs.add(new _funcdeclaration("editmute", PRIV_MASTER, _editmutefunc));
         _funcs.add(new _funcdeclaration("editunmute", PRIV_MASTER, _editmutefunc));
         _funcs.add(new _funcdeclaration("spy", PRIV_ADMIN, _spyfunc));
+        _funcs.add(new _funcdeclaration("persist", PRIV_MASTER, _persistteams));
     }
     
     void _privfail(clientinfo *ci)
@@ -4556,7 +4566,10 @@ namespace server
     extern void wrong_message_size(clientinfo *ci, int size);
     extern void ping_hack(clientinfo *ci, int ping);
     extern void no_send_position_hack(clientinfo *ci);
-    extern void speed_hack_ping(clientinfo *ci);
+    // extern void speed_hack_ping(clientinfo *ci);
+    void speed_hack_ping(clientinfo *ci) {
+        return;
+    }
 
     void parsepacket(int sender, int chan, packetbuf &p)     // has to parse exactly each byte of the packet
     {
@@ -5235,6 +5248,8 @@ namespace server
 
             case N_SETTEAM:
             {
+                if(_teams_persisted) break;
+                if(ci->_xi.team_forced) break;
                 int who = getint(p);
                 getstring(text, p);
                 filtertext(text, text, false, MAXTEAMLEN);
