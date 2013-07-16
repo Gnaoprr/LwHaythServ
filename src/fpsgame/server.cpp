@@ -242,6 +242,7 @@ namespace server
         vec position;
         float lastdistance;
         bool team_forced;
+        clientinfo *tkiller;
     };
     
     struct clientinfo
@@ -337,6 +338,7 @@ namespace server
             mapcrc = 0;
             warned = false;
             gameclip = false;
+            _xi.tkiller = 0;
         }
 
         void reassign()
@@ -649,11 +651,16 @@ namespace server
     VAR(restrictgamespeed, 0, 1, 1);
 
     //zeromod variables
-    VAR(clearbots, 0, 1, 1);
-    VAR(servergamespeed, 10, 100, 1000);
-    FVAR(servergamelimit, 1.0, 10.0, 1440.0);  //max is 24 hours
-    VAR(serverovertime, 0, 0, 1);
-    VAR(servercheckgbans, 0, 1, 2);
+    VAR(clearbots, 0, 1, 1);                        // decides if server clears bots upon changing map
+    VAR(servergamespeed, 10, 100, 1000);            // default gamespeed
+    VAR(servergamelimit, 10, 15, 30);               // game time (in minutes)
+    VAR(serverovertime, 0, 0, 1);                   // decides if server 
+    VAR(servercheckgbans, 0, 1, 2);                 // decides if server checks gbans (0=no;1=yes;2=checkifnoadminexists)
+    VAR(serverhideip, 0, 0, 1);                     // protects users privacy; disables showing ip in cube server listener
+    VAR(beststats, 0, 1, 1);                        // show best stats
+    VAR(serverintermission, 1000, 10000, 60000);    // intermission interval (in milliseconds)
+    VAR(serversuggestnp, 0, 1, 1);                  // decides if server suggest players to say #np
+    VAR(clearbansonempty, 0, 0, 1);                 // whether the server clears bans on empty server or not
     
     SVAR(serverdesc, "");
     SVAR(serverpass, "");
@@ -723,9 +730,12 @@ namespace server
             teamkills[i].teamkills += n;
             return;
         }
-        teamkillinfo &tk = teamkills.add();
-        tk.ip = ip;
-        tk.teamkills = n;
+        if(n > 0)
+        {
+            teamkillinfo &tk = teamkills.add();
+            tk.ip = ip;
+            tk.teamkills = n;
+        }
     }
 
     void checkteamkills()
@@ -741,7 +751,9 @@ namespace server
                 if(kick->ban > 0) addban(tk.ip, kick->ban);
                 kickclients(tk.ip);
                 teamkills.removeunordered(i);
+                continue;
             }
+            if(tk.teamkills <= 0) teamkills.removeunordered(i);
         }
         shouldcheckteamkills = false;
     }
@@ -1542,7 +1554,7 @@ namespace server
     }
     VAR(cheatingbanhours, 3, 6, 9);
     void cheating_kick(clientinfo *ci) {
-        sendservmsgf("\f3>>> \f1%s \f4got kicked by autokick (\f3cheating\f3)", ci->name);
+        sendservmsgf("\f3>>> \f1%s \f4got kicked by autokick (\f3cheating\f4, \f1%i\f3h\f4)", ci->name, cheatingbanhours);
         uint ip = getclientip(ci->clientnum);
         addban(ip, cheatingbanhours*60*60000);
         disconnect_client(ci->clientnum, DISC_KICK);
@@ -2180,6 +2192,38 @@ namespace server
         }
     }
 
+#define _BESTSTAT(stat) \
+    { \
+        best.setsize(0); \
+        best.add(clients[0]); \
+        besti = best[0]->state.stat; \
+        for(int i = 1; i < clients.length(); i++) if(clients[i] && clients[i]->state.state != CS_SPECTATOR) \
+        { \
+            if(clients[i]->state.stat > besti) \
+            { \
+                best.setsize(0); \
+                best.add(clients[i]); \
+                besti = clients[i]->state.stat; \
+            } \
+            else if(clients[i]->state.stat == besti) \
+            { \
+                best.add(clients[i]); \
+            } \
+        } \
+    }
+
+    void _printbest(vector<clientinfo *> &best, int besti, char *msg)
+    {
+        int l = min(best.length(), 3);
+        for(int i = 0; i < l; i++)
+        {
+            concatstring(msg, colorname(best[i]), MAXTRANS);
+            if(i + 1 < l) concatstring(msg, ", ", MAXTRANS);
+        }
+        defformatstring(buf)(" \f0(%i)", besti);
+        concatstring(msg, buf, MAXTRANS);
+    }
+
     void checkintermission()
     {
         if(gamemillis >= gamelimit && !interm)
@@ -2187,7 +2231,60 @@ namespace server
             sendf(-1, 1, "ri2", N_TIMEUP, 0);
             if(smode) smode->intermission();
             changegamespeed(100);
-            interm = gamemillis + 10000;
+            interm = gamemillis + int(serverintermission);
+            if(beststats && clients.length())
+            {
+                vector<clientinfo *> best;
+                int besti;
+                char msg[MAXTRANS];
+                
+                copystring(msg, "\f0[BEST STATS]", MAXTRANS);
+                
+                concatstring(msg, " \f2Frags: \f7", MAXTRANS);
+                _BESTSTAT(frags)
+                _printbest(best, besti, msg);
+                
+                concatstring(msg, " \f1Deaths: \f7", MAXTRANS);
+                _BESTSTAT(deaths)
+                _printbest(best, besti, msg);
+                
+                if(m_teammode)
+                {
+                    concatstring(msg, " \f6Teamkills: \f7", MAXTRANS);
+                    _BESTSTAT(teamkills)
+                    _printbest(best, besti, msg);
+                }
+                
+                concatstring(msg, " \f2Accuracy: \f7", MAXTRANS);
+                
+                best.setsize(0);
+                best.add(clients[0]);
+                float bestf = float(best[0]->state.damage*100)/float(max(best[0]->state.shotdamage, 1));
+                for(int i = 1; i < clients.length(); i++)
+                {
+                    if(((float(clients[i]->state.damage*100)/float(max(clients[i]->state.shotdamage, 1))) - bestf) >= 0.2)
+                    {
+                        best.setsize(0);
+                        best.add(clients[i]);
+                        bestf = float(clients[i]->state.damage*100)/float(max(clients[i]->state.shotdamage, 1));
+                    }
+                    else if(((float(clients[i]->state.damage*100)/float(max(clients[i]->state.shotdamage, 1))) - bestf) < 0.2)
+                    {
+                        best.add(clients[i]);
+                    }
+                }
+                
+                int l = min(best.length(), 3);
+                for(int i = 0; i < l; i++)
+                {
+                    concatstring(msg, colorname(best[i]), MAXTRANS);
+                    if(i + 1 < l) concatstring(msg, ", ", MAXTRANS);
+                }
+                defformatstring(buf)(" \f0(%.3f)", bestf);
+                concatstring(msg, buf, MAXTRANS);
+                
+                sendf(-1, 1, "ris", N_SERVMSG, msg);
+            }
         }
     }
 
@@ -2228,6 +2325,7 @@ namespace server
             if(actor!=target && isteam(actor->team, target->team)) 
             {
                 actor->state.teamkills++;
+                target->_xi.tkiller = actor;
                 addteamkill(actor, target, 1);
             }
             ts.deadflush = ts.lastdeath + DEATHMILLIS;
@@ -2587,7 +2685,11 @@ namespace server
     void clientdisconnect(int n)
     {
         clientinfo *ci = getinfo(n);
-        loopv(clients) if(clients[i]->authkickvictim == ci->clientnum) clients[i]->cleanauth(); 
+        loopv(clients)
+        {
+            if(clients[i]->authkickvictim == ci->clientnum) clients[i]->cleanauth(); 
+            if(clients[i]->_xi.tkiller == ci) clients[i]->_xi.tkiller = 0;
+        }
         if(ci->connected)
         {
             if(ci->privilege) setmaster(ci, false);
@@ -2595,9 +2697,9 @@ namespace server
             ci->state.timeplayed += lastmillis - ci->state.lasttimeplayed;
             savescore(ci);
             sendf(-1, 1, "ri2", N_CDIS, n);
-            clients.removeobj(ci);
             aiman::removeai(ci);
-            if(!numclients(-1, false, true)) noclients(); // bans clear when server empties
+            clients.removeobj(ci);
+            if(!numclients(-1, false, true) && clearbansonempty) noclients(); // bans clear when server empties
             if(ci->local) checkpausegame();
         }
         else connects.removeobj(ci);
@@ -2895,11 +2997,19 @@ namespace server
     int _getpriv(clientinfo *ci);
     void _privfail(clientinfo *ci);
     
+    VAR(serverdebug, 0, 1, 1);
+    VAR(debuglevel, 0, PRIV_ROOT, PRIV_ROOT+1);
+
     void _debug(const char *msg)
     {
         string buf;
-        formatstring(buf)("\fs\f3>>> \f4[\f1DEBUG\f4] %s\fr", msg?msg:"");
+        logoutf("debug::%s", msg?:"");
+        formatstring(buf)("\fs\f3>>> \f4[\f1DEBUG\f4] \f7%s", msg?msg:"");
         sendf(-1, 1, "ris", N_SERVMSG, buf);
+        loopv(clients) if(clients[i] && clients[i]->privilege >= debuglevel)
+        {
+            sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, buf);
+        }
     }
 
     //server variables
@@ -3507,6 +3617,7 @@ namespace server
         _manpages.add(new _manpage("exec", "<cubescript>", "Executes cubescript command"));
         _manpages.add(new _manpage("spy", "[1/0]", "Enters or leaves spy mode"));
         _manpages.add(new _manpage("persist", "<1/0>", "Persists or unpersists teams"));
+        _manpages.add(new _manpage("np forgive fg", "", "Forgives teamkill"));
     }
     
     void _man(const char *cmd, const char *args, clientinfo *ci) {
@@ -3977,6 +4088,27 @@ namespace server
         }
     }
     
+    void _delhook(const char *name, int (*hookfunc)(_hookparam *))
+    {
+        loopv(_hookfuncs) if(_hookfuncs[i] && !strcmp(_hookfuncs[i]->name, name))
+        {
+            if(hookfunc)
+            {
+                loopj(_hookfuncs[i]->funcs.length()) if(_hookfuncs[i]->funcs[j].func == hookfunc)
+                {
+                    _hookfuncs[i]->funcs.remove(j);
+                    break;
+                }
+            }
+            else
+            {
+                delete _hookfuncs[i];
+                _hookfuncs.removeunordered(i);
+            }
+            break;
+        }
+    }
+
     void _setext(char *s, void *ptr)
     {
         _pluginfunc *p = 0;
@@ -4008,7 +4140,9 @@ namespace server
     {
         if(!strcmp(s, "test")) return (void *)_testfunc;
         else if(!strcmp(s, "addhook")) return (void *)_addhook;
+        else if(!strcmp(s, "delhook")) return (void *)_delhook;
         else if(!strcmp(s, "sendf")) return (void *)sendf;
+        else if(!strcmp(s, "debug")) return (void *)_debug;
         else if(!strcmp(s, "notifypriv")) return (void *)_notifypriv;
         else
         {
@@ -4095,6 +4229,7 @@ namespace server
                 if(reinitfunc)
                 {
                     char *ret;
+                    _debug("z_reinit found");
                     ret = reinitfunc();
                     if(ret)
                     {
@@ -4149,6 +4284,8 @@ namespace server
                 return;
             }
             
+            _debug("executing z_init");
+
             char *ret;
             ret = initfunc((void *)_getext, (void *)_setext, argv[1]);
             if(ret)
@@ -4166,15 +4303,14 @@ namespace server
         }
     }
 
-    ICOMMAND(module, "s", (const char *_module), _load("load", _module, 0))
-
     void _pm(const char *cmd, const char *args, clientinfo *ci)
     {
         char *argv[2];
         char *cns[16];
         int cnc;
         char buf[MAXTRANS];
-        
+        string msg;
+
         if(!args || !*args)
         {
             _man("usage", cmd, ci);
@@ -4193,13 +4329,21 @@ namespace server
         for(int i=0;i<cnc;i++)
         {
             int j = atoi(cns[i]);
-            if(j==0 && *cns[i]!='0') continue;
+            if(j==0 && *cns[i]!='0')
+            {
+                if(ci)
+                {
+                    formatstring(msg)("\f2[FAIL] Unknown client number \"%s\"", cns[i]);
+                    sendf(ci->clientnum, 1, "ris", N_SERVMSG, msg);
+                    return;
+                }
+                else continue;
+            }
             bool exists=false;
-            for(int k=0;k<clientnums.length();k++) if(j==clientnums[k]) exists=true;
+            for(int k = 0; k < clients.length(); k++) if(clients[k]->clientnum == j) exists=true;
             if(!exists) clientnums.add(j);
         }
         
-        string msg;
         formatstring(msg)("\fs\f3>>> \f4[\f1PM:\f0%s\f4(\f7%i\f4)] \f0%s\fr", colorname(ci), ci->clientnum, argv[1]);
         
         for(int i=0;i<clientnums.length();i++)
@@ -4337,6 +4481,25 @@ namespace server
         _notify(msg, ci, PRIV_ROOT);
         execute(args);
     }
+
+    void _np(const char *cmd, const char *args, clientinfo *ci)
+    {
+        string msg;
+        if(!ci || !m_teammode) return;
+        if(!ci->_xi.tkiller)
+        {
+            formatstring(msg)("\f1[FORGIVE] no teamkills to forgive");
+            sendf(ci->clientnum, 1, "ris", N_SERVMSG, msg);
+            return;
+        }
+        ci->_xi.tkiller->state.teamkills--;
+        addteamkill(ci->_xi.tkiller, ci, -1);
+        formatstring(msg)("\f1[FORGIVE] \f7%s \f0forgave \f1your \f3teamkill", colorname(ci));
+        sendf(ci->_xi.tkiller->clientnum, 1, "ris", N_SERVMSG, msg);
+        formatstring(msg)("\f1[FORGIVE] \f7%s \f1teamkill forgiven", colorname(ci->_xi.tkiller));
+        sendf(ci->clientnum, 1, "ris", N_SERVMSG, msg);
+        ci->_xi.tkiller = 0;
+    }
     
     void _stats(const char *cmd, const char *args, clientinfo *ci)
     {
@@ -4344,6 +4507,7 @@ namespace server
         char *argv[16];
         int cnc;
         char buf[MAXTRANS];
+        string msg;
         
         if(args) strcpy(buf, args);
         else buf[0]=0;
@@ -4361,6 +4525,7 @@ namespace server
             for(int j=0;j<cns.length();j++) if(cn==cns[j]->clientnum) exists=true;
             if(exists) continue;
             
+            bool found = false;
             for(int j=0;j<clients.length();j++)
             {
                 if(cn==clients[j]->clientnum)
@@ -4368,6 +4533,12 @@ namespace server
                     cns.add(clients[j]);
                     break;
                 }
+            }
+            if(!found)
+            {
+                formatstring(msg)("\f2[FAIL] Unknown client number \f0%i", cn);
+                _notify(msg, ci);
+                return;
             }
         }
         //no cns found?
@@ -4496,6 +4667,9 @@ namespace server
         _funcs.add(new _funcdeclaration("editunmute", PRIV_MASTER, _editmutefunc));
         _funcs.add(new _funcdeclaration("spy", PRIV_ADMIN, _spyfunc));
         _funcs.add(new _funcdeclaration("persist", PRIV_MASTER, _persistteams));
+        _funcs.add(new _funcdeclaration("np", 0, _np));
+        _funcs.add(new _funcdeclaration("fg", 0, _np));
+        _funcs.add(new _funcdeclaration("forgive", 0, _np));
     }
     
     void _privfail(clientinfo *ci)
@@ -4548,8 +4722,25 @@ namespace server
         if(!executed) _nocommand(argv[0], ci);
     }
     
+    void _checktext(char *text, clientinfo *ci)
+    {
+        char buf[16];
+        char *argv[2];
+        int argc;
+        
+        if(!serversuggestnp || !ci || !ci->_xi.tkiller || !text[0]) return;
+        copystring(buf, text, 16);
+        argc = _argsep(buf, 2, argv);
+        if(!argc) return;
+        if((argv[0][0]=='n' || argv[0][0]=='N') && (argv[0][1]=='p' || argv[0][1]=='P')) goto _np;
+        if(argc >= 2 && (argv[0][0]=='n' || argv[0][0]=='N') && (argv[1][0]=='p' || argv[1][0]=='P') && (argv[1][1]=='r' || argv[1][1]=='R')) goto _np;
+        return;
+        _np:
+        sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f1FORGIVE\f4] \f7type \f5#\f6forgive \f7if you want to forgive a teamkill");
+    }
+
     ICOMMAND(zexec, "C", (char *cmd), _servcmd(cmd, 0));
-    ICOMMAND(zload, "C", (char *cmd), _load("load", cmd, 0));
+    ICOMMAND(module, "C", (char *cmd), _load("load", cmd, 0));
     ICOMMAND(zset, "C", (char *cmd), _set("set", cmd, 0));
     
 // ****************************************************************************************
@@ -4901,6 +5092,8 @@ namespace server
                 QUEUE_AI;
                 QUEUE_MSG;
                 getstring(text, p);
+                filtertext(text, text);
+                _checktext(text, ci);
                 if(!ci) break;
                 if(text[0]=='#')
                 {
@@ -4913,7 +5106,6 @@ namespace server
                     if(ci->_xi.spy)
                     {
                         cm->messages.drop();
-                        filtertext(text, text);
                         sendservmsgf("\f3 >>> \f4[\f6REMOTE\f4:\f7%s\f4] \f2%s", colorname(ci), text);
                     }
                     else if(ci->_xi.mute)
@@ -4933,7 +5125,6 @@ namespace server
                             }
                         } else {
                             ci->_xi.msg_sended ++;
-                            filtertext(text, text);
                             if(isdedicatedserver()) logoutf("%s: %s", colorname(cq), text);
                             QUEUE_STR(text);
                             ci->_xi.messagewait = totalmillis + messagewaitseconds*1000;
@@ -4947,6 +5138,7 @@ namespace server
             case N_SAYTEAM:
             {
                 getstring(text, p);
+                _checktext(text, ci);
                 if(!ci || !cq || (ci->state.state==CS_SPECTATOR && !ci->local && !ci->privilege) || !cq->team[0]) break;
                 if(ci->_xi.spy)
                 {

@@ -7,30 +7,23 @@ Need a Lightweight version of <a href="#haythserv">HaythServ</a>? LwHaythServ is
 	# Download:
 		git clone https://github.com/Gnaoprr/LwHaythServ ./HaythServ/
 		cd ./HaythServ/
-	# Compilation and installation:
-		# First compilation: 
-			cd ./src/
-			make
-			mv ./sauer_server ../
-			cd ../
-		# Other compilations:
-			cd ./src/
-			make
-			mv ./sauer_server ../
-			cd ../
-		# Recompilation:
-			cd ./src/
-			make clean clean-enet
-			make
-			mv ./sauer_server ../
-			cd ../
+	# Installation:
+		chmod +x ./bin/server
 	# Configuration:
 		# With vi:
-			vi server-init.cfg
+			vi ./conf/server.conf
+			vi ./conf/auth.conf
+			vi ./conf/anticheat.conf
+			vi ./conf/maps.conf
+			vi ./conf/zeromod.conf
 		# Or with nano:
-			nano server-init.cfg
+			nano ./conf/server.conf
+			nano ./conf/auth.conf
+			nano ./conf/anticheat.conf
+			nano ./conf/maps.conf
+			nano ./conf/zeromod.conf
 	# Start server:
-		./sauer_server >> server.log &
+		./bin/server
 	# Stop server:
 		kill `pgrep ./sauer_server` -9
 ```

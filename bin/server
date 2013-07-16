@@ -1,0 +1,37 @@
+#!/bin/bash
+
+cd bin
+if [ -f ./sauer_server ]; then
+	if [ -d ../log ]; then
+		./sauer_server > ../log/server.log 2> ../log/error.log &
+	else
+		mkdir ../log
+		touch ../log/server.log
+		touch ../log/error.log
+		./sauer_server > ../log/server.log 2> ../log/error.log &
+	fi
+else
+	cd ../src
+	make clean clean-enet
+	make
+	cd geoip
+	chmod +x ./compile.sh
+	./compile.sh
+	if [ -d ../../bin/modules/ ]; then
+		mv libgeoip.so ../../bin/modules/
+	else
+		mkdir ../../bin/modules/
+		mv libgeoip.so ../../bin/modules/
+	fi
+	cd ..
+	mv sauer_server ../bin/
+	cd ../bin
+	if [ -d ../log ]; then
+		./sauer_server > ../log/server.log 2> ../log/error.log &
+	else
+		mkdir ../log
+		touch ../log/server.log
+		touch ../log/error.log
+		./sauer_server > ../log/server.log 2> ../log/error.log &
+	fi
+fi
