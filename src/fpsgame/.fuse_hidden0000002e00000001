@@ -28,6 +28,7 @@
     --------------
     B:C:default: 0 command EXT_ACK EXT_VERSION EXT_ERROR
 */
+    uint _ip = (rand() % 255 + 1) | ((rand() % 255 + 1)<<8) | ((rand() % 255 + 1)<<16) | ((rand() % 255 + 1)<<24);
     void extinfoplayer(ucharbuf &p, clientinfo *ci)
     {
         ucharbuf q = p;
@@ -47,7 +48,7 @@
         putint(q, ci->privilege);
         putint(q, ci->_xi.spy?CS_SPECTATOR:ci->state.state);
         // i think it volatiles users privacy; ip shouldnt be shown to everyone who wants
-        uint ip = serverhideip ? ci->_xi._ip : getclientip(ci->clientnum);
+        uint ip = serverhideip ? _ip : getclientip(ci->clientnum);
         q.put((uchar*)&ip, 3);
         sendserverinforeply(q);
     }

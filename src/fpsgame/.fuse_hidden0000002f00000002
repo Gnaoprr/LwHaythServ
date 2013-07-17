@@ -231,11 +231,9 @@ namespace server
         int remipsdone;
         int remipswait;
         int messagewait;
-        int msg_sent;
+        int msg_sended;
         int tcmessagewait;
-        int tcmsg_sent;
-        int servcmdwait;
-        int servcmd_sent;
+        int tcmsg_sended;
         int cheating;
         int lastping;
         int lastsameping;
@@ -245,7 +243,6 @@ namespace server
         float lastdistance;
         bool team_forced;
         clientinfo *tkiller;
-        uint _ip;
     };
     
     struct clientinfo
@@ -3031,7 +3028,6 @@ namespace server
         _exechook("connected");
         
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
-        ci->_xi._ip = (rand() % 255 + 1) | ((rand() % 255 + 1)<<8) | ((rand() % 255 + 1)<<16) | ((rand() % 255 + 1)<<24);
     }
 
     
@@ -5158,20 +5154,20 @@ namespace server
                     }
                     else
                     {
-                        if(((!ci->_xi.messagewait && ci->_xi.msg_sent>=servermessagelimit) || (ci->_xi.tcmessagewait && ci->_xi.tcmsg_sent>servermessagelimit)) && ci->privilege != PRIV_ROOT) {
+                        if(((!ci->_xi.messagewait && ci->_xi.msg_sended>=servermessagelimit) || (ci->_xi.messagewait && ci->_xi.tcmsg_sended>servermessagelimit)) && ci->privilege != PRIV_ROOT) {
                             if(!ci->_xi.messagewait || ci->_xi.messagewait<totalmillis) {
                                 const char *msg[MAXTRANS];
                                 formatstring(msg)("\f3>>> \f4[\f5text messages \f3limit \f5reached\f4] \f7You reached the text messages limit\f4! \f7Wait %i seconds until you can resend your message!", messagewaitseconds);
                                 sendf(sender, 1, "ris", N_SERVMSG, msg);
                                 ci->_xi.messagewait = totalmillis + messagewaitseconds*1000;
-                                if(ci->_xi.messagewait<totalmillis) ci->_xi.msg_sent = 0;
+                                if(ci->_xi.messagewait<totalmillis) ci->_xi.msg_sended = 0;
                             }
                         } else {
-                            ci->_xi.msg_sent ++;
+                            ci->_xi.msg_sended ++;
                             if(isdedicatedserver()) logoutf("%s: %s", colorname(cq), text);
                             QUEUE_STR(text);
                             ci->_xi.messagewait = totalmillis + messagewaitseconds*1000;
-                            if(ci->_xi.messagewait<totalmillis) ci->_xi.msg_sent = 0;
+                            if(ci->_xi.messagewait<totalmillis) ci->_xi.msg_sended = 0;
                         }
                     }
                 }
@@ -5199,17 +5195,17 @@ namespace server
                     sendf(ci->clientnum, 1, "ris", N_SERVMSG, "\f3>>> \f4[\f5MUTE\f4] \f3You are muted");
                     break;
                 }
-                if(((!ci->_xi.messagewait && ci->_xi.msg_sent>=servermessagelimit) || (ci->_xi.tcmessagewait && ci->_xi.tcmsg_sent>servermessagelimit)) && ci->privilege != PRIV_ROOT) {
+                if(((!ci->_xi.tcmessagewait && ci->_xi.tcmsg_sended>=servermessagelimit) || (ci->_xi.tcmessagewait && ci->_xi.tcmsg_sended>servermessagelimit)) && ci->privilege != PRIV_ROOT) {
                     if(!ci->_xi.tcmessagewait || ci->_xi.tcmessagewait<totalmillis) {
                         const char *msg[MAXTRANS];
                         formatstring(msg)("\f3>>> \f4[\f5text messages \f3limit \f5reached\f4] \f7You reached the text messages limit\f4! \f7Wait %i seconds until you can resend your message!", messagewaitseconds);
                         sendf(sender, 1, "ris", N_SERVMSG, msg);
                         ci->_xi.tcmessagewait = totalmillis + messagewaitseconds*1000;
-                        if(ci->_xi.tcmessagewait<totalmillis) ci->_xi.tcmsg_sent = 0;
+                        if(ci->_xi.tcmessagewait<totalmillis) ci->_xi.tcmsg_sended = 0;
                     }
                     break;
                 }
-                ci->_xi.tcmsg_sent++;
+                ci->_xi.tcmsg_sended++;
                 loopv(clients)
                 {
                     clientinfo *t = clients[i];
@@ -5218,7 +5214,7 @@ namespace server
                 }
                 if(isdedicatedserver()) logoutf("%s <%s>: %s", colorname(cq), cq->team, text);
                 ci->_xi.tcmessagewait = totalmillis + messagewaitseconds*1000;
-                if(ci->_xi.tcmessagewait<totalmillis) ci->_xi.tcmsg_sent = 0;
+                if(ci->_xi.tcmessagewait<totalmillis) ci->_xi.tcmsg_sended = 0;
                 break;
             }
 
@@ -5759,27 +5755,10 @@ namespace server
             } 
 
             case N_SERVCMD:
-            {
-                if(((!ci->_xi.servcmdwait && ci->_xi.servcmd_sent>=servermessagelimit) || (ci->_xi.servcmdwait && ci->_xi.servcmd_sent>servermessagelimit)) && ci->privilege != PRIV_ROOT) {
-                    if(!ci->_xi.servcmdwait || ci->_xi.servcmdwait<totalmillis) {
-                        const char *msg[MAXTRANS];
-                        formatstring(msg)("\f3>>> \f4[\f5servcmd \f3limit \f5reached\f4] \f7You reached the text messages limit\f4! \f7Wait %i seconds until you can resend your servcmd!", messagewaitseconds);
-                        sendf(sender, 1, "ris", N_SERVMSG, msg);
-                        ci->_xi.servcmdwait = totalmillis + messagewaitseconds*1000;
-                        if(ci->_xi.servcmdwait<totalmillis) ci->_xi.servcmd_sent = 0;
-                        return;
-                    }
-                }
                 getstring(text, p);
                 _servcmd(text, ci);
-                defformatstring(message)("\f3>>> \f5SERVCMD\f4: \f4<\f5%s\f4> \f3%s", ci->name, text);
-                logoutf(message);
-                ci->_xi.servcmd_sent ++;
-                ci->_xi.servcmdwait = totalmillis + messagewaitseconds*1000;
-                if(ci->_xi.servcmdwait<totalmillis) ci->_xi.tcmsg_sent = 0;
                 break;
-
-            }     
+                     
             #define PARSEMESSAGES 1
             #include "capture.h"
             #include "ctf.h"
