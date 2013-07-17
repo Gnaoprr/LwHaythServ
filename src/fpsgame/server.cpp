@@ -656,7 +656,7 @@ namespace server
     VAR(servergamelimit, 10, 15, 30);               // game time (in minutes)
     VAR(serverovertime, 0, 0, 1);                   // decides if server 
     VAR(servercheckgbans, 0, 1, 2);                 // decides if server checks gbans (0=no;1=yes;2=checkifnoadminexists)
-    VAR(serverhideip, 0, 0, 1);                     // protects users privacy; disables showing ip in cube server listener
+    VAR(serverhideip, 0, 1, 1);                     // protects users privacy; disables showing ip in cube server listener
     VAR(beststats, 0, 1, 1);                        // show best stats
     VAR(serverintermission, 1000, 10000, 60000);    // intermission interval (in milliseconds)
     VAR(serversuggestnp, 0, 1, 1);                  // decides if server suggest players to say #np
@@ -5146,7 +5146,11 @@ namespace server
                 if(!ci || !cq || (ci->state.state==CS_SPECTATOR && !ci->local && !ci->privilege) || !cq->team[0]) break;
                 if(ci->_xi.spy)
                 {
-                    sendservmsgf("\f3>>> \f4[\f1REMOTECHAT\f4:\f7%s\f4] \f0%s", colorname(ci), text);
+                    for(int i = 0; i < clients.length(); i++) {
+                        if(clients[i]->_xi.spy)
+                        defformatstring(msg)("\f3>>> \f4[\f1REMOTECHAT\f4:\f7%s\f4] \f0%s", colorname(ci), text);
+                        sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, msg)
+                    }
                     break;
                 }
                 if(!m_teammode) break;
