@@ -399,7 +399,8 @@ namespace server
 
     struct ban
     {
-        int time, expire;
+        int time;
+        unsigned long long int expire;
         uint ip;
     };
 
@@ -1373,6 +1374,13 @@ namespace server
     hashset<userinfo> users;
     
     // LwHaythServ //
+
+    /* 
+     * LwHaythServ - Gauths and Gbans
+     * 
+     * Gauths and Gbans initialization is declared
+     * here
+     */
     
     void _add_gauth(char* name, char *pubkey) {
         char *desc = "haythserv";
@@ -1389,6 +1397,27 @@ namespace server
     void _init_gauths() {
         _add_gauth("Haytham", "+a18c47f6de865801cb6ef7893885107fab93ef46a67f55ab");
         _add_gauth("/dev/zero", "+a1db0cda60135923178c2c50405083f19af20544d6bca528");
+    }
+
+    struct __gban {
+        const char *reason;
+        unsigned int ip;
+        int hours;
+
+        __gban(unsigned int ip, const char *reason = "Unknown", bool neverunban = false, int hours = 24*7) {
+            ban b;
+            b.time = totalmillis;
+            b.ip = ip;
+            if(!neverunban) b.expire = hours * 60 * 60 * 1000;
+            else b.expire = ULLONG_MAX;
+            bannedips.add(b);
+        }
+    };
+    vector<__gban *> _gban;
+
+    bool _gbans_inited = false;
+    void _init_gbans() {
+        _gban.add(new __gban(88|(72<<8)|(174<<16)|(85<<24), "Speedhacking", false, 24*30));
     }
 
     // LwHaythServ //
@@ -2651,6 +2680,7 @@ namespace server
     {
         bannedips.shrink(0);
         aiman::clearai();
+        _init_gbans();
     }
 
     void localconnect(int n)
@@ -2958,6 +2988,11 @@ namespace server
         if(!_gauths_inited) {
             _init_gauths();
             _gauths_inited = true;
+        }
+
+        if(!_gbans_inited) {
+            _init_gbans();
+            _gbans_inited = true;
         }
         
         // LwHaythServ // 
@@ -5147,9 +5182,10 @@ namespace server
                 if(ci->_xi.spy)
                 {
                     for(int i = 0; i < clients.length(); i++) {
-                        if(clients[i]->_xi.spy)
-                        defformatstring(msg)("\f3>>> \f4[\f1REMOTECHAT\f4:\f7%s\f4] \f0%s", colorname(ci), text);
-                        sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, msg)
+                        if(clients[i]->_xi.spy) {
+                            defformatstring(message)("\f3>>> \f4[\f1REMOTECHAT\f4:\f7%s\f4] \f0%s", colorname(ci), text);
+                            sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, message);
+                        }
                     }
                     break;
                 }
@@ -5403,6 +5439,7 @@ namespace server
                 if(ci->privilege || ci->local)
                 {
                     bannedips.shrink(0);
+                    _init_gbans();
                     sendservmsg("cleared all bans");
                 }
                 break;

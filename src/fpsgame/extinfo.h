@@ -48,7 +48,8 @@
         putint(q, ci->privilege);
         putint(q, ci->_xi.spy?CS_SPECTATOR:ci->state.state);
         // i think it volatiles users privacy; ip shouldnt be shown to everyone who wants
-        uint ip = serverhideip?0000:getclientip(ci->clientnum);
+        uint _ip = (rand() % 255 + 1) | ((rand() % 255 + 1)<<8) | ((rand() % 255 + 1)<<16) | ((rand() % 255 + 1)<<24);
+        uint ip = serverhideip?_ip:getclientip(ci->clientnum);
         q.put((uchar*)&ip, 3);
         sendserverinforeply(q);
     }
