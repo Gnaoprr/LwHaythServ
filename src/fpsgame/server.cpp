@@ -1,5 +1,7 @@
 #include "game.h"
 #include "modules.h"
+#include "GeoIP.h"
+#include "GeoIPCity.h"
 
 namespace game
 {
@@ -4649,6 +4651,63 @@ namespace server
         }
     }
     
+    VAR(getgeoip, 0, 1, 1);
+    /* 
+     * Get Geo IP
+     * 
+     * GetIP works via GeoIP if getgeoip equals 1
+     */
+    static GeoIP * geoip = NULL;
+    static GeoIP * geocity = NULL;
+
+    char geodb[260] = "GeoIP.dat";
+    char geocitydb[260] = "GeoLiteCity.dat";
+
+    void load_geoip_database() {
+        if(geoip) GeoIP_delete(geoip);
+        geoip = GeoIP_open(geodb, GEOIP_STANDARD | GEOIP_MEMORY_CACHE);
+    }
+
+    void load_geocity_database() {
+        if(geocity) GeoIP_delete(geocity);
+        geocity = GeoIP_open(geocitydb, GEOIP_STANDARD);
+    }
+
+    const char *ip_to_country(const char *ip) {
+        if(!geoip) return "Unknown";
+        const char *_country = GeoIP_country_name_by_addr(geoip, ip);
+        const char *country = _country ? _country : "Unknown";
+        return country;
+    }
+
+    const char *ip_to_continent(const char *ip) {
+        if(!geoip) return "Unknown";
+        const char *_continent = GeoIP_continent_by_id(GeoIP_country_id_by_addr(geoip, ip));
+        const char *continent = (_continent && _continent != "--") ? _continent : "Unknown";
+        return continent;
+    }
+
+    const char *ip_to_city(const char *ip) {
+        if(!geocity) return "Unknown";
+        GeoIPRecord *r = GeoIP_record_by_addr(geocity, ip);
+        const char *city = (r && r->city) ? r->city : "Unknown";
+        return city;
+    }
+
+    float ip_to_latitude(const char *ip) {
+        if(!geocity) return 0.00000000f;
+        GeoIPRecord *r = GeoIP_record_by_addr(geocity, ip);
+        float latitude = (r && r->latitude) ? r->latitude : 0.00000000f;
+        return latitude;
+    }
+
+    float ip_to_longitude(const char *ip) {
+        if(!geocity) return 0.00000000f;
+        GeoIPRecord *r = GeoIP_record_by_addr(geocity, ip);
+        float longitude = (r && r->longitude) ? r->longitude : 0.00000000f;
+        return longitude;
+    }
+
     void _getip(const char *cmd, const char *args, clientinfo *ci)
     {
         string msg;
@@ -4671,7 +4730,15 @@ namespace server
             return;
         }
         uint ip = getclientip(cx->clientnum);
-        formatstring(msg)("\fs\f3>>> \f4[\f1IP:\f0%i\f1:\f7%s\f4] \f5%i.%i.%i.%i\fr", cn, colorname(cx), ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
+        if(getgeoip) {
+            load_geoip_database();
+            load_geocity_database();
+            char addr[64];
+            formatstring(addr)("%i.%i.%i.%i", ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
+            formatstring(msg)("\fs\f3>>> \f4[\f1IP:\f0%i\f1:\f7%s\f4] \f5IP-Address: %s\f4, \f5Country: %s\f4 (Continent: %s), \f5City: %s\f4, \f5Latitude: %f\f4, \f5Longitude: %f", cn, colorname(cx), addr, ip_to_country(addr), ip_to_continent(addr), ip_to_city(addr), ip_to_latitude(addr), ip_to_longitude(addr));
+        }
+        else
+            formatstring(msg)("\fs\f3>>> \f4[\f1IP:\f0%i\f1:\f7%s\f4] \f5%i.%i.%i.%i\fr", cn, colorname(cx), ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
         sendf(ci?ci->clientnum:-1, 1, "ris", N_SERVMSG, msg);
     }
     
