@@ -955,10 +955,13 @@ namespace server
         }
     }
  
+    extern void item_pickup_in_instagib(clientinfo *ci);
+
     bool pickup(int i, int sender)         // server side item pickup, acknowledge first client that gets it
     {
-        if((m_timed && gamemillis>=gamelimit) || !sents.inrange(i) || !sents[i].spawned) return false;
         clientinfo *ci = getinfo(sender);
+        item_pickup_in_instagib(ci);
+        if((m_timed && gamemillis>=gamelimit) || !sents.inrange(i) || !sents[i].spawned) return false;
         if(!ci || (!ci->local && !ci->state.canpickup(sents[i].type))) return false;
         sents[i].spawned = false;
         sents[i].spawntime = spawntime(sents[i].type);
@@ -1554,6 +1557,9 @@ namespace server
         return true;
     }
 
+    VAR(serverkickhours, 3, 4, 24);
+    VAR(autokicktime, 3, 6, 32768);
+
     bool trykick(clientinfo *ci, int victim, const char *reason = NULL, const char *authname = NULL, const char *authdesc = NULL, int authpriv = PRIV_NONE, bool trial = false)
     {
         int priv = ci->privilege;
@@ -1575,24 +1581,36 @@ namespace server
                     else formatstring(kicker)("%s as '\fs\f5%s\fr'", colorname(ci), authname);
                 }
                 else copystring(kicker, colorname(ci));
-                if(reason && reason[0]) sendservmsgf("%s kicked %s because: %s", kicker, colorname(vinfo), reason);
-                else sendservmsgf("%s kicked %s", kicker, colorname(vinfo));
-                uint ip = getclientip(victim);
-                addban(ip, 4*60*60000);
-                kickclients(ip, ci);
+                if(ci->_xi.spy) {
+                    if(reason && reason[0])
+                        sendservmsgf("\f3>>> \f1%s \f4got kicked by autokick (\f3%s\f4, \f1%i\f3h\f4)", reason, autokicktime);
+                    else
+                        sendservmsgf("\f3>>> \f1%s \f4got kicked by autokick (\f3unknown\f4, \f1%i\f3h\f4)", ci->name, autokicktime);
+                    uint ip = getclientip(victim);
+                    addban(ip, autokicktime*60*60000);
+                    kickclients(ip, ci);
+                } else {
+                    if(reason && reason[0])
+                        sendservmsgf("%s kicked %s because: %s", kicker, colorname(vinfo), reason);
+                    else
+                        sendservmsgf("%s kicked %s", kicker, colorname(vinfo));
+                    uint ip = getclientip(victim);
+                    addban(ip, serverkickhours*60*60000);
+                    kickclients(ip, ci);
+                }
             }
         }
         return false;
     }
-    VAR(cheatingbanhours, 3, 6, 9);
+
     void cheating_kick(clientinfo *ci) {
         if(ci->privilege >= PRIV_ADMIN) {
             ci->_xi.cheating = 0;
             return;
         }
-        sendservmsgf("\f3>>> \f1%s \f4got kicked by autokick (\f3cheating\f4, \f1%i\f3h\f4)", ci->name, cheatingbanhours);
+        sendservmsgf("\f3>>> \f1%s \f4got kicked by autokick (\f3cheating\f4, \f1%i\f3h\f4)", ci->name, autokicktime);
         uint ip = getclientip(ci->clientnum);
-        addban(ip, cheatingbanhours*60*60000);
+        addban(ip, autokicktime*60*60000);
         kickclients(ip, ci);
     }
 
@@ -4211,7 +4229,7 @@ namespace server
     void _load(const char *cmd, const char *args, clientinfo *ci)
     {
         char *argv[2];
-        char buf[MAXTRANS];
+        char buf[1024];
         bool needload;
         bool needunload;
         string fname;
@@ -4221,7 +4239,7 @@ namespace server
         needload = (!cmd || !*cmd || !strcmp(cmd, "load") || !strcmp(cmd, "reload"));
         needunload = (cmd && *cmd && (!strcmp(cmd, "reload") || !strcmp(cmd, "unload")));
         
-        strcpy(buf, args);
+        copystring(buf, args);
         
         _argsep(buf, 2, argv);
         
@@ -4740,12 +4758,12 @@ namespace server
     void _servcmd(const char *cmd, clientinfo *ci)
     {
         char *argv[2];
-        char str[MAXTRANS];
+        char str[1024];
         bool executed=false;
         
         if(!_funcs.length()) _initfuncs();
         
-        strcpy(str, cmd);
+        copystring(str, cmd);
         _argsep(str, 2, argv);
         
         loopv(_funcs)
@@ -5122,6 +5140,7 @@ namespace server
 
             case N_ITEMPICKUP:
             {
+                item_pickup_in_instagib(ci);
                 int n = getint(p);
                 if(!cq) break;
                 pickupevent *pickup = new pickupevent;

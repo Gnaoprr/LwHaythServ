@@ -28,6 +28,7 @@ VAR(editpacketsinnoncoop, 0, 0, 1);
 VAR(unknownsound, 0, 0, 1);
 VAR(wrongmessagesize, 0, 0, 1);
 VAR(pinghack, 0, 0, 1);
+VAR(itempickupininstagib, 0, 1, 1);
 
 /* 
  * Main anticheat.h
@@ -114,6 +115,15 @@ namespace server {
 		} else {
 			ci->_xi.lastsameping = 0;
 			ci->_xi.lastping = ping;
+		}
+	}
+	void item_pickup_in_instagib(clientinfo *ci) {
+		int cheatingprob;
+		if(securitylevel <= 3) cheatingprob = 100;
+		else if(securitylevel <= 6 && securitylevel > 3) cheatingprob = 50;
+		else cheatingprob = 25;
+		if(m_insta && itempickupininstagib) {
+			cheat_detected(ci, "Item pickup in instagib gamemodes", cheatingprob, true);
 		}
 	}
 }
