@@ -1,8 +1,8 @@
 #CXXFLAGS= -O3 -fomit-frame-pointer
 #CXXFLAGS= -O2 -pipe -fstack-protector -DGEOIPDATADIR -DGEOIP
-CFLAGS=-g -O0 -fno-inline -march=native -pipe -fstack-protector
-CXXFLAGS=-g -O0 -fno-inline -march=native -pipe -fstack-protector
-override CXXFLAGS+= -Wall -fsigned-char -fno-exceptions -fno-rtti
+CFLAGS=-g -O0 -fno-inline -march=native -pipe -fstack-protector -DGEOIPDATADIR -DGEOIP
+CXXFLAGS=-g -O0 -fno-inline -march=native -pipe -fstack-protector -DGEOIPDATADIR -DGEOIP
+override CXXFLAGS+= -Wall -fsigned-char -fno-exceptions -fno-rtti -Igeoip
 
 PLATFORM= $(shell uname -s)
 PLATFORM_PREFIX= native
@@ -120,7 +120,9 @@ SERVER_OBJS= \
 	engine/server-standalone.o \
 	engine/worldio-standalone.o \
 	fpsgame/entities-standalone.o \
-	fpsgame/server-standalone.o
+	fpsgame/server-standalone.o \
+	geoip/GeoIP-standalone.o \
+	geoip/GeoIPCity-standalone.o
 #	engine/world-standalone.o \
 #	engine/octa-standalone.o \
 #	engine/octaedit-standalone.o
@@ -187,8 +189,11 @@ else
 client:	libenet $(CLIENT_OBJS)
 	$(CXX) $(CXXFLAGS) -o sauer_client $(CLIENT_OBJS) $(CLIENT_LIBS)
 
-server:	libenet $(SERVER_OBJS)
-	$(CXX) $(CXXFLAGS) -o sauer_server $(SERVER_OBJS) $(SERVER_LIBS)  
+server: libenet $(SERVER_OBJS)
+	gcc -O2 -pipe -fstack-protector -DGEOIPDATADIR -DGEOIP -Wall -fsigned-char -fno-exceptions -DSTANDALONE -Igeoip -c -o geoip/GeoIP-standalone.o geoip/GeoIP.c
+	gcc -O2 -pipe -fstack-protector -DGEOIPDATADIR -DGEOIP -Wall -fsigned-char -fno-exceptions -DSTANDALONE -Ishared -Iengine -Ifpsgame -Ienet/include -Igeoip -c -o geoip/GeoIPCity-standalone.o geoip/GeoIPCity.c
+
+	$(CXX) $(CXXFLAGS) -o sauer_server $(SERVER_OBJS) $(SERVER_LIBS) 
 	
 master: libenet $(MASTER_OBJS)
 	$(CXX) $(CXXFLAGS) -o sauer_master $(MASTER_OBJS) $(MASTER_LIBS)  
@@ -460,6 +465,9 @@ fpsgame/game.h.gch: shared/cube.h shared/tools.h shared/geom.h shared/ents.h
 fpsgame/game.h.gch: shared/command.h shared/iengine.h shared/igame.h
 fpsgame/game.h.gch: fpsgame/ai.h
 
+geoip/GeoIP-standalone.o: geoip/GeoIP.h
+geoip/GeoIPCity-standalone.o: geoip/GeoIPCity.h
+
 
 shared/crypto-standalone.o: shared/cube.h shared/tools.h shared/geom.h
 shared/crypto-standalone.o: shared/ents.h shared/command.h shared/iengine.h
@@ -488,7 +496,8 @@ fpsgame/server-standalone.o: shared/iengine.h shared/igame.h fpsgame/ai.h
 fpsgame/server-standalone.o: fpsgame/capture.h fpsgame/ctf.h 
 fpsgame/server-standalone.o: fpsgame/collect.h fpsgame/extinfo.h
 fpsgame/server-standalone.o: fpsgame/aiman.h fpsgame/modules.h
-fpsgame/server-standalone.o: fpsgame/anticheat.h
+fpsgame/server-standalone.o: fpsgame/anticheat.h geoip/GeoIP.h
+fpsgame/server-standalone.o: geoip/GeoIPCity.h
 
 engine/master-standalone.o: shared/cube.h shared/tools.h shared/geom.h
 engine/master-standalone.o: shared/ents.h shared/command.h shared/iengine.h

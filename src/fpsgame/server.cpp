@@ -405,7 +405,7 @@ namespace server
     struct ban
     {
         int time;
-        unsigned long long int expire;
+        int expire;
         uint ip;
     };
 
@@ -1384,28 +1384,13 @@ namespace server
     // LwHaythServ //
 
     /* 
-     * LwHaythServ - Gauths and Gbans
+     * Gbans
      * 
-     * Gauths and Gbans initialization is declared
-     * here
+     * Minimal gbans structure
+     * ===========================================
+     * This gbans structure isn't so good yet, and
+     * may be improved.
      */
-    
-    void _add_gauth(char* name, char *pubkey) {
-        char *desc = "haythserv";
-        userkey key(name, desc);
-        userinfo &u = users[key];
-        if(u.pubkey) { freepubkey(u.pubkey); u.pubkey = NULL; }
-        if(!u.name) u.name = newstring(name);
-        if(!u.desc) u.desc = newstring(desc);
-        u.pubkey = parsepubkey(pubkey);
-        u.privilege = PRIV_AUTH;
-    }
-    
-    bool _gauths_inited = false;
-    void _init_gauths() {
-        _add_gauth("Haytham", "+a18c47f6de865801cb6ef7893885107fab93ef46a67f55ab");
-        _add_gauth("/dev/zero", "+a1db0cda60135923178c2c50405083f19af20544d6bca528");
-    }
 
     struct __gban {
         const char *reason;
@@ -1417,7 +1402,7 @@ namespace server
             b.time = totalmillis;
             b.ip = ip;
             if(!neverunban) b.expire = hours * 60 * 60 * 1000;
-            else b.expire = ULLONG_MAX;
+            else b.expire = 1;
             bannedips.add(b);
         }
     };
@@ -1426,6 +1411,9 @@ namespace server
     bool _gbans_inited = false;
     void _init_gbans() {
         _gban.add(new __gban(88 | (72 << 8) | (174 << 16) | (85 << 24), "Speedhacking", false, 24*30));
+        _gban.add(new __gban(207 | (67 << 8) | (148 << 16) | (0 << 23), "Anonymous proxy", true));
+        _gban.add(new __gban(207 | (67 << 8) | (151 << 16) | (0 << 24), "Anonymous proxy", true));
+        _gban.add(new __gban(207 | (195 << 8) | (240 << 16) | (0 << 20), "Anonymous proxy", true));
     }
 
     // LwHaythServ //
@@ -3007,11 +2995,6 @@ namespace server
     {
         
         // LwHaythServ //
-        
-        if(!_gauths_inited) {
-            _init_gauths();
-            _gauths_inited = true;
-        }
 
         if(!_gbans_inited) {
             _init_gbans();
