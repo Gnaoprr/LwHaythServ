@@ -25,7 +25,7 @@ Need a Lightweight version of <a href="#haythserv">HaythServ</a>? LwHaythServ is
 	# Start server:
 		./bin/server
 	# Stop server:
-		kill `pgrep ./sauer_server` -9
+		kill -9 `pgrep ./sauer_server`
 ```
 HaythServ
 ========
